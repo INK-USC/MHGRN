@@ -44,7 +44,7 @@ def evaluate_accuracy(eval_set, model, model_type):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model', default='kagnet', choices=['kernet', 'kagnet', 'relation_net', 'gcn', 'bert'], help='model type')
+    parser.add_argument('--model', default='gcn', choices=['kernet', 'kagnet', 'relation_net', 'gcn', 'bert'], help='model type')
     parser.add_argument('--loss', default='cross_entropy', choices=['margin_rank', 'cross_entropy'], help='model type')
     parser.add_argument('--mode', default='train', choices=['train', 'eval'], help='run training or evaluation')
     parser.add_argument('--glove', default='./data/glove/glove.6B.300d.txt', help='path to GloVe embeddings')
