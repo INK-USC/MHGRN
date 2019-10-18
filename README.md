@@ -1,5 +1,5 @@
 # BERT-GCN-NLI
-Graph construction and BETR-GCN for NLI task
+Graph construction and BERT-GCN for NLI task
 
 ## Resources
 
@@ -29,7 +29,6 @@ Graph construction and BETR-GCN for NLI task
 - [tqdm](<https://github.com/tqdm/tqdm>)
 - [dgl](<https://github.com/dmlc/dgl>) == 0.3 (GPU version)
 - [networkx](<https://networkx.github.io/>) == 2.3
-- [tensorflow-gpu](<https://www.tensorflow.org/>) == 1.14
 - [fairseq](<https://github.com/pytorch/fairseq>) == 0.8.0
 
 Run the following commands to create a conda environment (assume CUDA10):
@@ -50,9 +49,9 @@ python -m spacy download en
 First, you need to download all the necessary data in order to train the model:
 
 ```bash
-git clone https://github.com/Evan-Feng/knowledge-reasoning-qa.git
-cd knowledge-reasoning-qa
-bash download.sh
+git clone https://github.com/shanzhenren/BERT-GCN-NLI.git
+cd BERT-GCN-NLI
+bash scripts/download.sh
 ```
 
 The script will:
@@ -76,7 +75,7 @@ By default, all available CPU cores will be used for multi-processing in order t
 ```bash
 python preprocess.py -p 20
 ```
-To preprocess a particular dataset, for example, csqa, run:
+To preprocess a particular dataset, for example, CommonsenseQA, run:
 
 ```bash
 python preprocess.py --run common csqa
@@ -90,7 +89,7 @@ The script will:
 - Generate paths for each question-answer paths and perform path pruning
 - Generate the final grounded schema graphs
 
-The preprocessing procedure takes approximately 3 hours on a 40-core CPU server. All intermediate files are in .jsonl format and stored in various folders. The resulting file structure will look like:
+The preprocessing procedure of CommonsenseQA takes approximately 3 hours on a 40-core CPU server. All intermediate files are in .jsonl or .pk format and stored in various folders. The resulting file structure will look like:
 
 ```plain
 .
@@ -116,6 +115,6 @@ The preprocessing procedure takes approximately 3 hours on a 40-core CPU server.
 Run the following command to train a GCN+BERT model:
 
 ```bash
-python kagnet.py --model gcn
+python main.py --model gcn
 ```
 
