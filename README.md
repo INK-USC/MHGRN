@@ -27,7 +27,7 @@ ConceptNet version == 5.6.0
 
 **Entity Vocab:** [ent-vocab]()
 
-**Relation Vocab (merged):** [rel-vocab]()
+**Relation Vocab (merged, for TransE only):** [rel-vocab]()
 
 | Embedding Model | Dimensionality | Description                                               | Downloads                                                    |
 | --------------- | -------------- | --------------------------------------------------------- | ------------------------------------------------------------ |
@@ -150,6 +150,7 @@ Some important command line arguments are listed as follows (run `python {lm,rn,
 
 | Arg                             | Values                                                     | Description             | Notes                                                        |
 | ------------------------------- | ---------------------------------------------------------- | ----------------------- | ------------------------------------------------------------ |
+| `--mode`                        | {train, eval, ...}                                         | Training or Evaluation  | default=train                                                |
 | `-enc, --encoder`               | {lstm, openai-gpt, bert-large-unased, roberta-large, ....} | Text Encoer             | Model names (except for lstm) are the ones used by [huggingface-transformers](<https://github.com/huggingface/transformers>), default=bert-large-uncased |
 | `--optim`                       | {adam, adamw, radam}                                       | Optimizer               | default=radam                                                |
 | `-ds, --dataset`                | {csqa, obqa}                                               | Dataset                 | default=csqa                                                 |
