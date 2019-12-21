@@ -3,6 +3,7 @@ from utils.utils import *
 from modeling.modeling_encoder import MODEL_NAME_TO_CLASS
 
 ENCODER_DEFAULT_LR = {
+    'default': 1e-3,
     'csqa': {
         'lstm': 3e-4,
         'openai-gpt': 1e-4,
@@ -31,13 +32,15 @@ DATASET_NO_TEST = ['socialiqa']
 
 EMB_PATHS = {
     'transe': './data/transe/glove.transe.sgd.ent.npy',
+    'lm': './data/transe/glove.transe.sgd.ent.npy',
     'numberbatch': './data/transe/concept.nb.npy',
+    'tzw': './data/cpnet/tzw.ent.npy',
 }
 
 
 def add_data_arguments(parser):
     # arguments that all datasets share
-    parser.add_argument('--ent_emb', default=['transe'], choices=['transe', 'numberbatch'], nargs='+', help='sources for entity embeddings')
+    parser.add_argument('--ent_emb', default=['tzw'], choices=['transe', 'numberbatch', 'lm', 'tzw'], nargs='+', help='sources for entity embeddings')
     parser.add_argument('--ent_emb_paths', default=['./data/transe/glove.transe.sgd.ent.npy'], nargs='+', help='paths to entity embedding file(s)')
     parser.add_argument('--rel_emb_path', default='./data/transe/glove.transe.sgd.rel.npy', help='paths to relation embedding file')
     # dataset specific
@@ -49,10 +52,10 @@ def add_data_arguments(parser):
     parser.add_argument('--dev_statements', default='./data/{dataset}/statement/dev.statement.jsonl')
     parser.add_argument('--test_statements', default='./data/{dataset}/statement/test.statement.jsonl')
     # preprocessing options
-    parser.add_argument('--max_seq_len', default=64, type=int)
+    parser.add_argument('-sl', '--max_seq_len', default=64, type=int)
     # set dataset defaults
     args, _ = parser.parse_known_args()
-    parser.set_defaults(ent_emb_paths=[EMB_PATHS[s] for s in args.ent_emb],
+    parser.set_defaults(ent_emb_paths=[EMB_PATHS.get(s) for s in args.ent_emb],
                         inhouse=(DATASET_SETTING[args.dataset] == 'inhouse'),
                         inhouse_train_qids=args.inhouse_train_qids.format(dataset=args.dataset))
     data_splits = ('train', 'dev') if args.dataset in DATASET_NO_TEST else ('train', 'dev', 'test')
@@ -79,7 +82,7 @@ def add_encoder_arguments(parser):
     parser.add_argument('--encoder_freeze_emb', default=True, type=bool_flag, nargs='?', const=True, help='freeze lstm input embedding layer')
     parser.add_argument('--encoder_pooler', default='max', choices=['max', 'mean'], help='pooling function')
     args, _ = parser.parse_known_args()
-    parser.set_defaults(encoder_lr=ENCODER_DEFAULT_LR[args.dataset][args.encoder])
+    parser.set_defaults(encoder_lr=ENCODER_DEFAULT_LR[args.dataset].get(args.encoder, ENCODER_DEFAULT_LR['default']))
 
 
 def add_optimization_arguments(parser):
@@ -90,8 +93,8 @@ def add_optimization_arguments(parser):
     parser.add_argument('--warmup_steps', type=float, default=150)
     parser.add_argument('--max_grad_norm', default=1.0, type=float, help='max grad norm (0 to disable)')
     parser.add_argument('--weight_decay', default=1e-2, type=float, help='l2 weight decay strength')
-    parser.add_argument("--n_epochs", default=100, type=int, help="total number of training epochs to perform.")
-    parser.add_argument("--max_epochs_before_stop", default=2, type=int, help="stop training if dev does not increase for N epochs")
+    parser.add_argument('--n_epochs', default=100, type=int, help='total number of training epochs to perform.')
+    parser.add_argument('-me', '--max_epochs_before_stop', default=2, type=int, help='stop training if dev does not increase for N epochs')
 
 
 def add_additional_arguments(parser):
@@ -106,7 +109,7 @@ def add_additional_arguments(parser):
 
 def get_parser():
     """A helper function that handles the arguments that all models share"""
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(add_help=False)
     add_data_arguments(parser)
     add_encoder_arguments(parser)
     add_optimization_arguments(parser)
