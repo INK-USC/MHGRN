@@ -53,9 +53,10 @@ class MLP(nn.Module):
     ----------
     num_layers: number of hidden layers
     """
+    activation_classes = {'gelu': GELU, 'relu': nn.ReLU, 'tanh': nn.Tanh}
 
     def __init__(self, input_size, hidden_size, output_size, num_layers, dropout, batch_norm=False,
-                 init_last_layer_bias_to_zero=False, layer_norm=False):
+                 init_last_layer_bias_to_zero=False, layer_norm=False, activation='gelu'):
         super().__init__()
 
         self.input_size = input_size
@@ -79,7 +80,7 @@ class MLP(nn.Module):
                     self.layers.add_module(f'{i}-BatchNorm1d', nn.BatchNorm1d(self.hidden_size))
                 if self.layer_norm:
                     self.layers.add_module(f'{i}-LayerNorm', nn.LayerNorm(self.hidden_size))
-                self.layers.add_module(f'{i}-GELU', GELU())
+                self.layers.add_module(f'{i}-{activation}', self.activation_classes[activation.lower()]())
         if init_last_layer_bias_to_zero:
             self.layers[-1].bias.data.fill_(0)
 
@@ -92,21 +93,22 @@ class MaxPoolLayer(nn.Module):
     A layer that performs max pooling along the sequence dimension
     """
 
-    def __init__(self, mask_with_len=True):
+    def __init__(self):
         super().__init__()
-        self.mask_with_len = mask_with_len
 
-    def forward(self, inputs, masks):
+    def forward(self, inputs, mask_or_lengths):
         """
         inputs: tensor of shape (batch_size, seq_len, hidden_size)
-        masks: tensor of shape (batch_size) if self.mask_with_len else (batch_size, seq_len)
+        mask_or_lengths: tensor of shape (batch_size) or (batch_size, seq_len)
 
         returns: tensor of shape (batch_size, hidden_size)
         """
         bs, sl, _ = inputs.size()
-        if self.mask_with_len:
-            masks = (torch.arange(sl).unsqueeze(0).expand(bs, sl).to(inputs.device) >= masks.unsqueeze(1))
-        masked_inputs = inputs.masked_fill(masks.unsqueeze(-1).expand_as(inputs), float('-inf'))
+        if len(mask_or_lengths.size()) == 1:
+            mask = (torch.arange(sl, device=inputs.device).unsqueeze(0).expand(bs, sl) >= mask_or_lengths.unsqueeze(1))
+        else:
+            mask = mask_or_lengths
+        masked_inputs = inputs.masked_fill(mask.unsqueeze(-1).expand_as(inputs), float('-inf'))
         max_pooled = masked_inputs.max(1)[0]
         return max_pooled
 
@@ -116,22 +118,24 @@ class MeanPoolLayer(nn.Module):
     A layer that performs mean pooling along the sequence dimension
     """
 
-    def __init__(self, mask_with_len=True):
+    def __init__(self):
         super().__init__()
-        self.mask_with_len = mask_with_len
 
-    def forward(self, inputs, masks):
+    def forward(self, inputs, mask_or_lengths):
         """
         inputs: tensor of shape (batch_size, seq_len, hidden_size)
-        masks: tensor of shape (batch_size) if self.mask_with_len else (batch_size, seq_len)
+        mask_or_lengths: tensor of shape (batch_size) or (batch_size, seq_len)
 
         returns: tensor of shape (batch_size, hidden_size)
         """
         bs, sl, _ = inputs.size()
-        if self.mask_with_len:
-            masks = (torch.arange(sl).unsqueeze(0).expand(bs, sl).to(inputs.device) >= masks.unsqueeze(1))
-        masked_inputs = inputs.masked_fill(masks.unsqueeze(-1).expand_as(inputs), float(0))
-        mean_pooled = masked_inputs.sum(1) / ((1 - masks).sum(1).unsqueeze(-1).float().to(inputs.device))
+        if len(mask_or_lengths.size()) == 1:
+            mask = (torch.arange(sl, device=inputs.device).unsqueeze(0).expand(bs, sl) >= mask_or_lengths.unsqueeze(1))
+            lengths = mask_or_lengths.float()
+        else:
+            mask, lengths = mask_or_lengths, (1 - mask_or_lengths.float()).sum(1)
+        masked_inputs = inputs.masked_fill(mask.unsqueeze(-1).expand_as(inputs), 0.0)
+        mean_pooled = masked_inputs.sum(1) / lengths.unsqueeze(-1)
         return mean_pooled
 
 
@@ -169,12 +173,25 @@ class EmbeddingDropout(nn.Module):
                            self.emb.norm_type, self.emb.scale_grad_by_freq, self.emb.sparse)
 
 
+class RNNDropout(nn.Module):
+    "Dropout with probability `p` that is consistent on the seq_len dimension."
+
+    def __init__(self, p: float = 0.5):
+        super().__init__()
+        self.p = p
+
+    def forward(self, x):
+        if not self.training or self.p == 0.:
+            return x
+        m = dropout_mask(x.data, (x.size(0), 1, x.size(2)), self.p)
+        return x * m
+
+
 class LSTMEncoder(nn.Module):
 
     def __init__(self, vocab_size=300, emb_size=300, hidden_size=300, num_layers=2, bidirectional=True,
                  emb_p=0, input_p=0, hidden_p=0, output_p=0, pretrained_emb=None, pooling=True, pad=False):
         super().__init__()
-        self.pad = pad
         self.vocab_size = vocab_size
         self.emb_size = emb_size
         self.hidden_size = hidden_size
@@ -211,20 +228,9 @@ class LSTMEncoder(nn.Module):
         embed = self.input_dropout(embed)
         lstm_inputs = pack_padded_sequence(embed, lengths, batch_first=True, enforce_sorted=False)
         rnn_outputs, _ = self.rnn(lstm_inputs)
-        rnn_outputs, _ = pad_packed_sequence(rnn_outputs, batch_first=True)
-        if self.pooling:
-            max_pooled = self.max_pool(rnn_outputs, lengths)
-            return self.output_dropout(max_pooled)
-        else:
-            if self.bidirectional:
-                outputs_f, outputs_b = torch.chunk(rnn_outputs, 2, dim=2)
-                outputs = torch.cat((outputs_f, outputs_b), 2)  # (bz, max(*lengths), 2 * h_dim)
-            if self.pad:
-                to_pad = full_length - outputs.size()[1]
-                h_dim = outputs.size()[-1]
-                return torch.cat((self.output_dropout(outputs),
-                                  torch.full((bz, to_pad, h_dim), 0, dtype=outputs.dtype).to(outputs.device)), 1)  # (nbz, full_l (70), dim)
-            return self.output_dropout(outputs)
+        rnn_outputs, _ = pad_packed_sequence(rnn_outputs, batch_first=True, total_length=full_length)
+        rnn_outputs = self.output_dropout(rnn_outputs)
+        return self.max_pool(rnn_outputs, lengths) if self.pooling else rnn_outputs
 
 
 class TripleEncoder(nn.Module):
@@ -307,23 +313,24 @@ class MatrixVectorScaledDotProductAttention(nn.Module):
         return output, attn
 
 
-class MatrixVectorMultiHeadAttention(nn.Module):
+class MultiheadAttPoolLayer(nn.Module):
 
-    def __init__(self, n_head, d_q_original, d_k_original, d_k, d_v, dropout=0.1):
+    def __init__(self, n_head, d_q_original, d_k_original, dropout=0.1):
         super().__init__()
+        assert d_k_original % n_head == 0  # make sure the outpute dimension equals to d_k_origin
         self.n_head = n_head
-        self.d_k = d_k
-        self.d_v = d_v
+        self.d_k = d_k_original // n_head
+        self.d_v = d_k_original // n_head
 
-        self.w_qs = nn.Linear(d_q_original, n_head * d_k)
-        self.w_ks = nn.Linear(d_k_original, n_head * d_k)
-        self.w_vs = nn.Linear(d_k_original, n_head * d_v)
+        self.w_qs = nn.Linear(d_q_original, n_head * self.d_k)
+        self.w_ks = nn.Linear(d_k_original, n_head * self.d_k)
+        self.w_vs = nn.Linear(d_k_original, n_head * self.d_v)
 
-        nn.init.normal_(self.w_qs.weight, mean=0, std=np.sqrt(2.0 / (d_q_original + d_k)))
-        nn.init.normal_(self.w_ks.weight, mean=0, std=np.sqrt(2.0 / (d_k_original + d_k)))
-        nn.init.normal_(self.w_vs.weight, mean=0, std=np.sqrt(2.0 / (d_k_original + d_v)))
+        nn.init.normal_(self.w_qs.weight, mean=0, std=np.sqrt(2.0 / (d_q_original + self.d_k)))
+        nn.init.normal_(self.w_ks.weight, mean=0, std=np.sqrt(2.0 / (d_k_original + self.d_k)))
+        nn.init.normal_(self.w_vs.weight, mean=0, std=np.sqrt(2.0 / (d_k_original + self.d_v)))
 
-        self.attention = MatrixVectorScaledDotProductAttention(temperature=np.power(d_k, 0.5))
+        self.attention = MatrixVectorScaledDotProductAttention(temperature=np.power(self.d_k, 0.5))
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, q, k, mask=None):
@@ -356,23 +363,24 @@ class MatrixVectorMultiHeadAttention(nn.Module):
         return output, attn
 
 
-class TypedMatrixVectorMultiHeadAttention(nn.Module):
+class TypedMultiheadAttPoolLayer(nn.Module):
 
-    def __init__(self, n_head, d_q_original, d_k_original, d_k, d_v, dropout=0.1, n_type=1):
+    def __init__(self, n_head, d_q_original, d_k_original, dropout=0.1, n_type=1):
         super().__init__()
+        assert d_k_original % n_head == 0  # make sure the outpute dimension equals to d_k_origin
         self.n_head = n_head
-        self.d_k = d_k
-        self.d_v = d_v
+        self.d_k = d_k_original // n_head
+        self.d_v = d_k_original // n_head
 
-        self.w_qs = nn.Linear(d_q_original, n_head * d_k)
-        self.w_ks = TypedLinear(d_k_original, n_head * d_k, n_type)
-        self.w_vs = TypedLinear(d_k_original, n_head * d_v, n_type)
+        self.w_qs = nn.Linear(d_q_original, n_head * self.d_k)
+        self.w_ks = TypedLinear(d_k_original, n_head * self.d_k, n_type)
+        self.w_vs = TypedLinear(d_k_original, n_head * self.d_v, n_type)
 
-        nn.init.normal_(self.w_qs.weight, mean=0, std=np.sqrt(2.0 / (d_q_original + d_k)))
-        nn.init.normal_(self.w_ks.weight, mean=0, std=np.sqrt(2.0 / (d_k_original + d_k)))
-        nn.init.normal_(self.w_vs.weight, mean=0, std=np.sqrt(2.0 / (d_k_original + d_v)))
+        nn.init.normal_(self.w_qs.weight, mean=0, std=np.sqrt(2.0 / (d_q_original + self.d_k)))
+        nn.init.normal_(self.w_ks.weight, mean=0, std=np.sqrt(2.0 / (d_k_original + self.d_k)))
+        nn.init.normal_(self.w_vs.weight, mean=0, std=np.sqrt(2.0 / (d_k_original + self.d_v)))
 
-        self.attention = MatrixVectorScaledDotProductAttention(temperature=np.power(d_k, 0.5))
+        self.attention = MatrixVectorScaledDotProductAttention(temperature=np.power(self.d_k, 0.5))
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, q, k, mask=None, type_ids=None):

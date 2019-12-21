@@ -3,8 +3,9 @@ import numpy as np
 import json
 import pickle
 from tqdm import tqdm
+import dgl
 from transformers import (OpenAIGPTTokenizer, BertTokenizer, XLNetTokenizer, RobertaTokenizer)
-from utils.vocab import *
+from utils.tokenization_utils import *
 
 GPT_SPECIAL_TOKENS = ['_start_', '_delimiter_', '_classify_']
 
@@ -176,6 +177,64 @@ class MultiGPUAdjDataBatchGenerator(object):
             return obj.to(device)
 
 
+class MultiGPUNxgDataBatchGenerator(object):
+    """
+    tensors0, lists0  are on device0
+    tensors1, lists1, adj, labels  are on device1
+    """
+
+    def __init__(self, device0, device1, batch_size, indexes, qids, labels,
+                 tensors0=[], lists0=[], tensors1=[], lists1=[], graph_data=None):
+        self.device0 = device0
+        self.device1 = device1
+        self.batch_size = batch_size
+        self.indexes = indexes
+        self.qids = qids
+        self.labels = labels
+        self.tensors0 = tensors0
+        self.lists0 = lists0
+        self.tensors1 = tensors1
+        self.lists1 = lists1
+        self.graph_data = graph_data
+
+    def __len__(self):
+        return (self.indexes.size(0) - 1) // self.batch_size + 1
+
+    def __iter__(self):
+        bs = self.batch_size
+        n = self.indexes.size(0)
+        for a in range(0, n, bs):
+            b = min(n, a + bs)
+            batch_indexes = self.indexes[a:b]
+            batch_qids = [self.qids[idx] for idx in batch_indexes]
+            batch_labels = self._to_device(self.labels[batch_indexes], self.device1)
+            batch_tensors0 = [self._to_device(x[batch_indexes], self.device0) for x in self.tensors0]
+            batch_tensors1 = [self._to_device(x[batch_indexes], self.device1) for x in self.tensors1]
+            batch_lists0 = [self._to_device([x[i] for i in batch_indexes], self.device0) for x in self.lists0]
+            # qa_pair_data, cpt_path_data, rel_path_data, qa_path_num_data, path_len_data
+            batch_lists1 = [self._to_device([x[i] for i in batch_indexes], self.device1) for x in self.lists1]
+
+            flat_graph_data = sum(self.graph_data, [])
+            concept_mapping_dicts = []
+            acc_start = 0
+            for g in flat_graph_data:
+                concept_mapping_dict = {}
+                for index, cncpt_id in enumerate(g.ndata['cncpt_ids']):
+                    concept_mapping_dict[int(cncpt_id)] = acc_start + index
+                acc_start += len(g.nodes())
+                concept_mapping_dicts.append(concept_mapping_dict)
+            batched_graph = dgl.batch(flat_graph_data)
+            batched_graph.ndata['cncpt_ids'] = batched_graph.ndata['cncpt_ids'].to(self.device1)
+
+            yield tuple([batch_qids, batch_labels, *batch_tensors0, *batch_tensors1, *batch_lists0, *batch_lists1, batched_graph, concept_mapping_dicts])
+
+    def _to_device(self, obj, device):
+        if isinstance(obj, (tuple, list)):
+            return [self._to_device(item, device) for item in obj]
+        else:
+            return obj.to(device)
+
+
 def load_2hop_relational_paths(input_jsonl_path, max_tuple_num, num_choice=None):
     with open(input_jsonl_path, 'r') as fin:
         rpath_data = [json.loads(line) for line in fin]
@@ -207,6 +266,89 @@ def load_2hop_relational_paths(input_jsonl_path, max_tuple_num, num_choice=None)
         num_tuples = num_tuples.view(-1, num_choice)
 
     return qa_data, rel_data, num_tuples
+
+
+def load_2hop_relational_paths_w_emb(rpath_jsonl_path, cpt_jsonl_path, emb_pk_path, max_tuple_num, max_cpt_num, num_choice=None):
+    with open(rpath_jsonl_path, 'r') as fin:
+        rpath_data = [json.loads(line) for line in fin]
+    print('rpath loaded')
+    with open(cpt_jsonl_path, 'rb') as fin:
+        adj_concept_pairs = pickle.load(fin)  # (adj, concepts, qm, am)
+    print('cpt loaded')
+    with open(emb_pk_path, 'rb') as fin:
+        all_embs = pickle.load(fin)
+    print('embedding loaded')
+    i = 0
+    while True:
+        if all_embs[i].shape[0] == 0:
+            i += 1
+        else:
+            emb_dim = all_embs[i].shape[1]
+            break
+    assert emb_dim > 0
+
+    n_samples = len(rpath_data)
+    qa_data = torch.zeros((n_samples, max_tuple_num, 2), dtype=torch.long)
+    rel_data = torch.zeros((n_samples, max_tuple_num), dtype=torch.long)
+    num_tuples = torch.zeros((n_samples,), dtype=torch.long)
+    emb_data = torch.zeros((n_samples, max_cpt_num, emb_dim))
+    maxi = 0
+    for i, (data, cpt) in enumerate(tqdm(zip(rpath_data, adj_concept_pairs), total=n_samples, desc='loading QA pairs')):
+        cpt = cpt[1]  # np.array
+        embs = np.array(all_embs[i], dtype=np.float32)
+        ori_cpt2idx = {c: i for (i, c) in enumerate(cpt)}
+        mask = np.zeros(len(cpt), dtype=np.bool)
+
+        cur_qa = []
+        cur_rel = []
+        for dic in data['paths']:
+            mask[ori_cpt2idx[dic['qc']]] = True
+            mask[ori_cpt2idx[dic['ac']]] = True
+            if len(dic['rel']) == 1:
+                cur_qa.append([dic['qc'], dic['ac']])
+                cur_rel.append(dic['rel'][0])
+            elif len(dic['rel']) == 2:
+                cur_qa.append([dic['qc'], dic['ac']])
+                cur_rel.append(34 + dic['rel'][0] * 34 + dic['rel'][1])
+            else:
+                raise ValueError('Invalid path length')
+        assert len(cur_qa) == len(cur_rel)
+        # print('ori embs', embs.shape)
+        embs = embs[mask]
+        maxi = max(maxi, embs.shape[0])
+        # print('embs', embs.shape)
+        if len(embs) == 0:
+            embs = np.zeros((1, emb_dim), dtype=np.float32)
+        try:
+            assert embs.shape[0] <= max_cpt_num
+        except:
+            print(embs.size())
+            print(max_cpt_num)
+            print(mask.shape)
+            print(mask)
+            exit()
+        cpt = cpt[mask]
+        cpt2idx = {c: i for (i, c) in enumerate(cpt)}
+        cur_qa = [[cpt2idx[q], cpt2idx[a]] for [q, a] in cur_qa]
+        try:
+            assert (torch.tensor(cur_qa) < len(embs)).all()
+        except:
+            print(cur_qa)
+            print(len(embs))
+        cur_qa, cur_rel = cur_qa[:min(max_tuple_num, len(cur_qa))], cur_rel[:min(max_tuple_num, len(cur_rel))]
+        qa_data[i][:len(cur_qa)] = torch.tensor(cur_qa) if cur_qa else torch.zeros((0, 2), dtype=torch.long)
+        rel_data[i][:len(cur_rel)] = torch.tensor(cur_rel) if cur_rel else torch.zeros((0,), dtype=torch.long)
+        num_tuples[i] = (len(cur_qa) + len(cur_rel)) // 2  # code style suggested by kiwisher
+        emb_data[i][:len(embs)] = torch.tensor(embs)
+
+    print(maxi)
+    if num_choice is not None:
+        qa_data = qa_data.view(-1, num_choice, max_tuple_num, 2)
+        rel_data = rel_data.view(-1, num_choice, max_tuple_num)
+        emb_data = emb_data.view(-1, num_choice, max_cpt_num, emb_dim)
+        num_tuples = num_tuples.view(-1, num_choice)
+
+    return qa_data, rel_data, num_tuples, emb_data
 
 
 def load_tokenized_statements(tokenized_path, num_choice, max_seq_len, freq_cutoff, vocab=None):
@@ -536,8 +678,40 @@ def load_bert_xlnet_roberta_input_tensors(statement_jsonl_path, model_type, mode
     return (example_ids, all_label, *data_tensors)
 
 
+def load_lstm_input_tensors(input_jsonl_path, max_seq_length):
+    def _truncate_seq_pair(tokens_a, tokens_b, max_length):
+        while len(tokens_a) + len(tokens_b) > max_length:
+            tokens_a.pop() if len(tokens_a) > len(tokens_b) else tokens_b.pop()
+
+    tokenizer = WordTokenizer.from_pretrained('lstm')
+    qids, labels, input_ids, input_lengths = [], [], [], []
+    pad_id, = tokenizer.convert_tokens_to_ids([PAD_TOK])
+    with open(input_jsonl_path, "r", encoding="utf-8") as fin:
+        for line in fin:
+            input_json = json.loads(line)
+            qids.append(input_json['id'])
+            labels.append(ord(input_json.get("answerKey", "A")) - ord("A"))
+            instance_input_ids, instance_input_lengths = [], []
+            question_ids = tokenizer.convert_tokens_to_ids(tokenizer.tokenize(input_json["question"]["stem"]))
+            for ending in input_json["question"]["choices"]:
+                question_ids_copy = question_ids.copy()
+                answer_ids = tokenizer.convert_tokens_to_ids(tokenizer.tokenize(ending["text"]))
+                _truncate_seq_pair(question_ids_copy, answer_ids, max_seq_length)
+                ids = question_ids_copy + answer_ids + [pad_id] * (max_seq_length - len(question_ids_copy) - len(answer_ids))
+                instance_input_ids.append(ids)
+                instance_input_lengths.append(len(question_ids_copy) + len(answer_ids))
+            input_ids.append(instance_input_ids)
+            input_lengths.append(instance_input_lengths)
+    labels = torch.tensor(labels, dtype=torch.long)
+    input_ids = torch.tensor(input_ids, dtype=torch.long)
+    input_lengths = torch.tensor(input_lengths, dtype=torch.long)
+    return qids, labels, input_ids, input_lengths
+
+
 def load_input_tensors(input_jsonl_path, model_type, model_name, max_seq_length):
-    if model_type in ('gpt',):
+    if model_type in ('lstm',):
+        return load_lstm_input_tensors(input_jsonl_path, max_seq_length)
+    elif model_type in ('gpt',):
         return load_gpt_input_tensors(input_jsonl_path, max_seq_length)
     elif model_type in ('bert', 'xlnet', 'roberta'):
         return load_bert_xlnet_roberta_input_tensors(input_jsonl_path, model_type, model_name, max_seq_length)

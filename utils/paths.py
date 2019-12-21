@@ -7,6 +7,7 @@ import json
 import random
 import os
 from .conceptnet import merged_relations
+import pickle
 
 __all__ = ['find_paths', 'score_paths', 'prune_paths']
 
@@ -119,6 +120,52 @@ def find_paths_qa_concept_pair(source: str, target: str, ifprint=False):
 
         pf_res.append({"path": p, "rel": rl})
     return pf_res
+
+
+def find_paths_from_adj_per_inst(input):
+    adj, concepts, qm, am = input
+    adj = adj.toarray()
+    ij, k = adj.shape
+
+    adj = np.any(adj.reshape(ij // k, k, k), axis=0)
+    simple_schema_graph = nx.from_numpy_matrix(adj)
+    mapping = {i: int(c) for (i, c) in enumerate(concepts)}
+    simple_schema_graph = nx.relabel_nodes(simple_schema_graph, mapping)
+    qcs, acs = concepts[qm].tolist(), concepts[am].tolist()
+    pfr_qa = []
+    lengths = []
+    for ac in acs:
+        for qc in qcs:
+            if qc not in simple_schema_graph.nodes() or ac not in simple_schema_graph.nodes():
+                print('QA pair doesn\'t exist in schema graph.')
+                pf_res = None
+                lengths.append([0] * 3)
+            else:
+                all_path = []
+                try:
+                    for p in nx.shortest_simple_paths(simple_schema_graph, source=qc, target=ac):
+                        if len(p) >= 5:
+                            break
+                        if len(p) >= 2:  # skip paths of length 1
+                            all_path.append(p)
+                except nx.exception.NetworkXNoPath:
+                    pass
+
+                length = [len(x) for x in all_path]
+                lengths.append([length.count(2), length.count(3), length.count(4)])
+                pf_res = []
+                for p in all_path:
+                    rl = []
+                    for src in range(len(p) - 1):
+                        src_concept = p[src]
+                        tgt_concept = p[src + 1]
+                        rel_list = get_edge(src_concept, tgt_concept)
+                        rl.append(rel_list)
+                    pf_res.append({"path": p, "rel": rl})
+            pfr_qa.append({"ac": ac, "qc": qc, "pf_res": pf_res})
+    g = nx.convert_node_labels_to_integers(simple_schema_graph, label_attribute='cid')
+
+    return pfr_qa, nx.node_link_data(g), lengths
 
 
 def find_paths_qa_pair(qa_pair):
@@ -268,6 +315,30 @@ def find_paths(grounded_path, cpnet_vocab_path, cpnet_graph_path, output_path, n
 
     print(f'paths saved to {output_path}')
     print()
+
+
+def generate_path_and_graph_from_adj(adj_path, cpnet_graph_path, output_path, graph_output_path, num_processes=1, random_state=0, dump_len=False):
+    print(f'generating paths for {adj_path}...')
+    global cpnet
+    if cpnet is None:
+        cpnet = nx.read_gpickle(cpnet_graph_path)
+    random.seed(random_state)
+    np.random.seed(random_state)
+    with open(adj_path, 'rb') as fin:
+        adj_concept_pairs = pickle.load(fin)  # (adj, concepts, qm, am)
+    all_len = []
+    with Pool(num_processes) as p, open(output_path, 'w') as path_output, open(graph_output_path, 'w') as graph_output:
+        for pfr_qa, graph, lengths in tqdm(p.imap(find_paths_from_adj_per_inst, adj_concept_pairs), total=len(adj_concept_pairs), desc='Searching for paths'):
+            path_output.write(json.dumps(pfr_qa) + '\n')
+            graph_output.write(json.dumps(graph) + '\n')
+            all_len.append(lengths)
+    if dump_len:
+        with open(adj_path+'.len.pk', 'wb') as f:
+            pickle.dump(all_len, f)
+    print(f'paths saved to {output_path}')
+    print(f'graphs saved to {graph_output_path}')
+    print()
+
 
 
 def score_paths(raw_paths_path, concept_emb_path, rel_emb_path, cpnet_vocab_path, output_path, num_processes=1, method='triple_cls'):

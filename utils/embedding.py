@@ -1,10 +1,11 @@
 import numpy as np
 from tqdm import tqdm
+from utils.tokenization_utils import EXTRA_TOKS
 
 __all__ = ['glove2npy', 'load_vectors_from_npy_with_vocab', ]
 
 
-def load_vectors(path, skip_head=False):
+def load_vectors(path, skip_head=False, add_special_tokens=None, random_state=0):
     vocab = []
     vectors = None
     nrow = sum(1 for line in open(path, 'r', encoding='utf-8'))
@@ -17,15 +18,23 @@ def load_vectors(path, skip_head=False):
             vec = np.array(elements[1:], dtype=float)
             vocab.append(word)
             if vectors is None:
-                vectors = np.zeros((nrow, len(vec)), dtype=float)
+                vectors = np.zeros((nrow, len(vec)), dtype=np.float64)
             vectors[i] = vec
+
+    np.random.seed(random_state)
+    n_special = 0 if add_special_tokens is None else len(add_special_tokens)
+    add_vectors = np.random.normal(np.mean(vectors), np.std(vectors), size=(n_special, vectors.shape[1]))
+    vectors = np.concatenate((vectors, add_vectors), 0)
+    vocab += add_special_tokens
     return vocab, vectors
 
 
-def glove2npy(glove_path, output_npy_path, output_vocab_path, skip_head=False):
+def glove2npy(glove_path, output_npy_path, output_vocab_path, skip_head=False,
+              add_special_tokens=EXTRA_TOKS, random_state=0):
     print('binarizing GloVe embeddings...')
 
-    vocab, vectors = load_vectors(glove_path, skip_head)
+    vocab, vectors = load_vectors(glove_path, skip_head=skip_head,
+                                  add_special_tokens=add_special_tokens, random_state=random_state)
     np.save(output_npy_path, vectors)
     with open(output_vocab_path, "w", encoding='utf-8') as fout:
         for word in vocab:

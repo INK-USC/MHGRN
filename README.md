@@ -1,16 +1,22 @@
-# BERT-GCN-NLI
-Graph construction and BERT-GCN for NLI task
+# KRQA-baselines
+
+This repository implements the following baseline models:
+
+- **RelationNet** (Triple encoding + Multi-head pooling)
+- **R-GCN** (R-GCN + Multi-head pooling)
+- **KagNet** (LSTM-based Path encoding + Hierarchy pooling)
+- **GConAttn**
+- **KVMem**
+
+Each model supports the following encoders:
+
+- **LSTM** (lstm)
+- **GPT** (openai-gpt)
+- **BERT** (bert-base-uncased/bert-large-uncased/bert-base-cased/bert-large-cased)
+- **XLNet** (xlnet-large)
+- **RoBERTa** (roberta-large)
 
 ## Resources
-
-### Statement vectors extracted from finetuned LM
-
-|   Model    | Setting  | Dev Acc | Layer | Epoch |                                                              |                                                              |                                                              |
-| :--------: | :------: | :-----: | :---: | :---: | :----------------------------------------------------------: | :----------------------------------------------------------: | :----------------------------------------------------------: |
-| BERT-Large | Official |  63.14  |  -2   |   1   | [train](<https://csr.s3-us-west-1.amazonaws.com/train.bert.large.layer-2.epoch1.npy>) | [dev](<https://csr.s3-us-west-1.amazonaws.com/dev.bert.large.layer-2.epoch1.npy>) | [test](<https://csr.s3-us-west-1.amazonaws.com/test.bert.large.layer-2.epoch1.npy>) |
-| BERT-Large | In-house |         |       |       |                                                              |                                                              |                                                              |
-|  RoBERTa   | Official |         |       |       |                                                              |                                                              |                                                              |
-|  RoBERTa   | In-house |         |       |       |                                                              |                                                              |                                                              |
 
 ### ConceptNet embeddings
 
@@ -18,8 +24,6 @@ Graph construction and BERT-GCN for NLI task
 | :----: | :------------: | :-------: | :-----------: | :------------: | :---: | :----------------------------------------------------------: | :----------------------------------------------------------: |
 | TransE |      100       |    SGD    |     0.001     | GloVe-MaxPool  | 1000  | [entities](<https://csr.s3-us-west-1.amazonaws.com/glove.transe.sgd.ent.npy>) | [relations](<https://csr.s3-us-west-1.amazonaws.com/glove.transe.sgd.rel.npy>) |
 | TransE |      200       |    SGD    |     0.001     | GloVe-MaxPool  | 1000  | [entities](<https://csr.s3-us-west-1.amazonaws.com/glove.transe.sgd.lr0.001.d200.e1000.ent.npy>) | [relations](<https://csr.s3-us-west-1.amazonaws.com/glove.transe.sgd.lr0.001.d200.e1000.rel.npy>) |
-| TransE |      300       |           |               |                |       |                                                              |                                                              |
-| TransE |      600       |           |               |                |       |                                                              |                                                              |
 
 ## Dependencies
 
@@ -29,7 +33,6 @@ Graph construction and BERT-GCN for NLI task
 - [tqdm](<https://github.com/tqdm/tqdm>)
 - [dgl](<https://github.com/dmlc/dgl>) == 0.3 (GPU version)
 - [networkx](<https://networkx.github.io/>) == 2.3
-- [fairseq](<https://github.com/pytorch/fairseq>) == 0.8.0
 
 Run the following commands to create a conda environment (assume CUDA10):
 
@@ -49,8 +52,8 @@ python -m spacy download en
 First, you need to download all the necessary data in order to train the model:
 
 ```bash
-git clone https://github.com/shanzhenren/BERT-GCN-NLI.git
-cd BERT-GCN-NLI
+git clone https://github.com/Evan-Feng/KRQA-baselines.git
+cd KRQA-baselines
 bash scripts/download.sh
 ```
 
@@ -60,7 +63,6 @@ The script will:
 - Download [ConceptNet](<http://conceptnet.io/>)
 - Download pretrained [GloVe](<https://nlp.stanford.edu/projects/glove/>) embeddings
 - Download pretrained TransE embeddings
-- Download extracted BERT-large features
 
 ### 2. Preprocess
 
@@ -75,21 +77,15 @@ By default, all available CPU cores will be used for multi-processing in order t
 ```bash
 python preprocess.py -p 20
 ```
-To preprocess a particular dataset, for example, CommonsenseQA, run:
-
-```bash
-python preprocess.py --run common csqa
-```
 
 The script will:
 
 - Convert the original datasets into entailment datasets
 - Extract English relations from ConceptNet, merge the original 42 relation types into 17 types
 - Find all mentioned concepts in the questions and answers
-- Generate paths for each question-answer paths and perform path pruning
-- Generate the final grounded schema graphs
+- Generate the schema graphs
 
-The preprocessing procedure of CommonsenseQA takes approximately 3 hours on a 40-core CPU server. All intermediate files are in .jsonl or .pk format and stored in various folders. The resulting file structure will look like:
+The preprocessing procedure takes approximately 3 hours on a 40-core CPU server. Most intermediate files are in .jsonl or .pk format and stored in various folders. The resulting file structure will look like:
 
 ```plain
 .
@@ -112,9 +108,35 @@ The preprocessing procedure of CommonsenseQA takes approximately 3 hours on a 40
 
 ### 3. Training 
 
-Run the following command to train a GCN+BERT model:
+Run the following command to train a RoBERTa-Large model on CommonsenseQA:
 
 ```bash
-python main.py --model gcn
+python lm.py --encoder roberta-large --dataset csqa
 ```
 
+To train a RelationNet model with BERT-Large as the encoder:
+
+```bash
+python rn.py --encoder bert-large-uncased
+```
+
+To search the parameters for RoBERTa-Large on CommonsenseQA:
+
+```bash
+bash scripts/param_search_lm.sh csqa roberta-large
+```
+
+To search the parameters for BERT+RelationNet on CommonsenseQA:
+
+```bash
+bash scripts/param_search_rn.sh csqa bert-large-uncased
+```
+
+
+### 4. Evaluation
+
+To evaluate a trained model:
+
+```bash
+python lm.py --mode eval
+```
