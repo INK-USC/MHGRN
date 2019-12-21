@@ -1,29 +1,41 @@
-# KRQA-baselines
+# LM-GNN-QA
 
-This repository implements the following baseline models:
+This repository implements graph encoding models for question answering (including vanilla LM finetuning):
 
-- **RelationNet** (Triple encoding + Multi-head pooling)
-- **R-GCN** (R-GCN + Multi-head pooling)
-- **KagNet** (LSTM-based Path encoding + Hierarchy pooling)
+- **RelationNet**
+- **R-GCN**
+- **KagNet** 
 - **GConAttn**
 - **KVMem**
+- **MultiGRN**
 
-Each model supports the following encoders:
+Each model supports the following text encoders:
 
-- **LSTM** (lstm)
-- **GPT** (openai-gpt)
-- **BERT** (bert-base-uncased/bert-large-uncased/bert-base-cased/bert-large-cased)
-- **XLNet** (xlnet-large)
-- **RoBERTa** (roberta-large)
+- **LSTM**
+- **GPT**
+- **BERT** 
+- **XLNet** 
+- **RoBERTa**
+
+
 
 ## Resources
 
-### ConceptNet embeddings
+### ConceptNet Embeddings (Node Features)
 
-| Model  | Dimensionality | Optimizer | Learning rate | Initialization | Epoch |                                                              |                                                              |
-| :----: | :------------: | :-------: | :-----------: | :------------: | :---: | :----------------------------------------------------------: | :----------------------------------------------------------: |
-| TransE |      100       |    SGD    |     0.001     | GloVe-MaxPool  | 1000  | [entities](<https://csr.s3-us-west-1.amazonaws.com/glove.transe.sgd.ent.npy>) | [relations](<https://csr.s3-us-west-1.amazonaws.com/glove.transe.sgd.rel.npy>) |
-| TransE |      200       |    SGD    |     0.001     | GloVe-MaxPool  | 1000  | [entities](<https://csr.s3-us-west-1.amazonaws.com/glove.transe.sgd.lr0.001.d200.e1000.ent.npy>) | [relations](<https://csr.s3-us-west-1.amazonaws.com/glove.transe.sgd.lr0.001.d200.e1000.rel.npy>) |
+ConceptNet version == 5.6.0
+
+**Entity Vocab:** [ent-vocab]()
+
+**Relation Vocab (merged):** [rel-vocab]()
+
+| Embedding Model | Dimensionality | Description                                               | Downloads                                                    |
+| --------------- | -------------- | --------------------------------------------------------- | ------------------------------------------------------------ |
+| TransE          | 100            | Obtained using OpenKE with optim=sgd, lr=1e-3, epoch=1000 | [entities](<https://csr.s3-us-west-1.amazonaws.com/glove.transe.sgd.ent.npy>) [relations](<https://csr.s3-us-west-1.amazonaws.com/glove.transe.sgd.rel.npy>) |
+| NumberBatch     | 100            | <https://github.com/commonsense/conceptnet-numberbatch>   | [entities]()                                                 |
+| BERT-based      | 1024           | Provided by Zhengwei                                      | [entities]()                                                 |
+
+
 
 ## Dependencies
 
@@ -45,6 +57,8 @@ pip install transformers==2.0.0 tqdm networkx==2.3 nltk spacy==2.1.6
 python -m spacy download en
 ```
 
+
+
 ## Usage
 
 ### 1. Download Data
@@ -52,8 +66,8 @@ python -m spacy download en
 First, you need to download all the necessary data in order to train the model:
 
 ```bash
-git clone https://github.com/Evan-Feng/KRQA-baselines.git
-cd KRQA-baselines
+git clone https://github.com/shanzhenren/LM-GNN-QA.git
+cd LM-GNN-QA
 bash scripts/download.sh
 ```
 
@@ -61,7 +75,6 @@ The script will:
 
 - Download the [CommonsenseQA](<https://www.tau-nlp.org/commonsenseqa>) dataset
 - Download [ConceptNet](<http://conceptnet.io/>)
-- Download pretrained [GloVe](<https://nlp.stanford.edu/projects/glove/>) embeddings
 - Download pretrained TransE embeddings
 
 ### 2. Preprocess
@@ -80,10 +93,10 @@ python preprocess.py -p 20
 
 The script will:
 
-- Convert the original datasets into entailment datasets
+- Convert the original datasets into .jsonl files (stored in `data/csqa/statement/`)
 - Extract English relations from ConceptNet, merge the original 42 relation types into 17 types
-- Find all mentioned concepts in the questions and answers
-- Generate the schema graphs
+- Identify all mentioned concepts in the questions and answers
+- Extract subgraphs for each q-a pair
 
 The preprocessing procedure takes approximately 3 hours on a 40-core CPU server. Most intermediate files are in .jsonl or .pk format and stored in various folders. The resulting file structure will look like:
 
@@ -98,27 +111,14 @@ The preprocessing procedure takes approximately 3 hours on a 40-core CPU server.
         ├── train_rand_split.jsonl
         ├── dev_rand_split.jsonl
         ├── test_rand_split_no_answers.jsonl
-        ├── bert/                  (features extracted from BERT-large)
         ├── statement/             (converted statements)
-        ├── tokenized/             (tokenized statements)
-        ├── grounded/              (grounded concepts)
+        ├── grounded/              (grounded entities)
         ├── paths/                 (unpruned/pruned paths)
-        └── graphs/                (schema graphs)
+        ├── graphs/                (extracted subgraphs)
+        ├── ...
 ```
 
-### 3. Training 
-
-Run the following command to train a RoBERTa-Large model on CommonsenseQA:
-
-```bash
-python lm.py --encoder roberta-large --dataset csqa
-```
-
-To train a RelationNet model with BERT-Large as the encoder:
-
-```bash
-python rn.py --encoder bert-large-uncased
-```
+### 3. Hyperparameter Search (optional)
 
 To search the parameters for RoBERTa-Large on CommonsenseQA:
 
@@ -132,11 +132,65 @@ To search the parameters for BERT+RelationNet on CommonsenseQA:
 bash scripts/param_search_rn.sh csqa bert-large-uncased
 ```
 
+### 4. Training 
 
-### 4. Evaluation
+Each graph encoding model is implemented in a single script:
 
-To evaluate a trained model:
+| Graph Encoder                                                | Script      | Description                                                  |
+| ------------------------------------------------------------ | ----------- | ------------------------------------------------------------ |
+| None                                                         | lm.py       | w/o knowledge graph                                          |
+| [Relation Network](<https://papers.nips.cc/paper/7082-a-simple-neural-network-module-for-relational-reasoning.pdf>) | rn.py       |                                                              |
+| [R-GCN](<https://arxiv.org/pdf/1703.06103.pdf>)              | rgcn.py     | Use `--gnn_layer_num ` and `--num_basis` to specify #layer and #basis |
+| KagNet                                                       | kagnet.py   | Adapted from <https://github.com/INK-USC/KagNet>             |
+| Gcon-Attn                                                    | gconattn.py |                                                              |
+| KV-Memory                                                    | kvmem.py    |                                                              |
+| MultiGRN                                                     | grn.py      |                                                              |
+
+Some important command line arguments are listed as follows (run `python {lm,rn,rgcn,...}.py -h` for a complete list):
+
+| Arg                             | Values                                                     | Description             | Notes                                                        |
+| ------------------------------- | ---------------------------------------------------------- | ----------------------- | ------------------------------------------------------------ |
+| `-enc, --encoder`               | {lstm, openai-gpt, bert-large-unased, roberta-large, ....} | Text Encoer             | Model names (except for lstm) are the ones used by [huggingface-transformers](<https://github.com/huggingface/transformers>), default=bert-large-uncased |
+| `--optim`                       | {adam, adamw, radam}                                       | Optimizer               | default=radam                                                |
+| `-ds, --dataset`                | {csqa, obqa}                                               | Dataset                 | default=csqa                                                 |
+| `-ih, --inhouse`                | {0, 1}                                                     | Run In-house Split      | default=1, only applicable to CSQA                           |
+| `--ent_emb`                     | {transe, numberbatch, tzw}                                 | Entity Embeddings       | default=tzw (BERT-based node features)                       |
+| `-sl, --max_seq_len`            | {32, 64, 128, 256}                                         | Maximum Sequence Length | Use 128 or 256 for datasets that contain long sentences! default=64 |
+| `-elr, --encoder_lr`            | {1e-5, 2e-5, 3e-5, 6e-5, 1e-4}                             | Text Encoder LR         | default values in `utils/parser_utils.py`                    |
+| `-dlr, --decoder_lr`            | {1e-4, 3e-4, 1e-3, 3e-3}                                   | Graph Encoder LR        | default values in `{script}.py`                              |
+| `--lr_schedule`                 | {fixed, warmup_linear, warmup_constant}                    | Learning Rate Schedule  | default=fixed                                                |
+| `-me, --max_epochs_before_stop` | {2, 4, 6}                                                  | Early Stopping Patience | default=2                                                    |
+| `-bs, --batch_size`             | {16, 32, 64}                                               | Batch Size              | default=32                                                   |
+| `--save_dir`                    | str                                                        | Checkpoint Directory    |                                                              |
+| `--seed`                        | {0, 1, 2, 3}                                               | Random Seed             | default=0                                                    |
+
+For example, run the following command to train a RoBERTa-Large model on CommonsenseQA:
 
 ```bash
-python lm.py --mode eval
+python lm.py --encoder roberta-large --dataset csqa
 ```
+
+To train a RelationNet with BERT-Large-Uncased as the encoder:
+
+```bash
+python rn.py --encoder bert-large-uncased
+```
+
+### 5. Evaluation
+
+To evaluate a trained model (you need to specify `--save_dir` if the checkpoint is not stored in the default directory):
+
+```bash
+python {lm,rn,rgcn,...}.py --mode eval [ --save_dir path/to/directory/ ]
+```
+
+
+
+## Use Your Own Dataset
+
+- Convert your dataset to  `{train,dev,test}.statement.jsonl`  in .jsonl format (see `data/csqa/statement/train.statement.jsonl`)
+- Create a directory in `data/{yourdataset}/` to store the .jsonl files
+- Modify `preprocess.py` and perform subgraph extraction for your data
+- Modify `utils/parser_utils.py` to support your own dataset
+- Tune `encoder_lr`,`decoder_lr` and other important hyperparameters
+
