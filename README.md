@@ -25,12 +25,12 @@ We provide preprocessed ConceptNet and pretrained entity embeddings for your own
 
 ### ConceptNet (5.6.0)
 
-| Description                  | Downloads                     | Notes                                                        |
-| ---------------------------- | ----------------------------- | ------------------------------------------------------------ |
-| Entity Vocab                 | [entity-vocab]()              | one entity per line, space replaced by '_'                   |
-| Relation Vocab               | [relation-vocab]()            | one relation per line, merged                                |
-| ConceptNet (CSV format)      | [conceptnet-5.6.0-csv]()      | English tuples extracted from the full conceptnet with merged relations |
-| ConceptNet (NetworkX format) | [conceptnet-5.6.0-networkx]() | NetworkX pickled format, pruned by filtering out stop words  |
+| Description                  | Downloads                                                    | Notes                                                        |
+| ---------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+| Entity Vocab                 | [entity-vocab](https://csr.s3-us-west-1.amazonaws.com/concept.txt) | one entity per line, space replaced by '_'                   |
+| Relation Vocab               | [relation-vocab](https://csr.s3-us-west-1.amazonaws.com/relation.txt) | one relation per line, merged                                |
+| ConceptNet (CSV format)      | [conceptnet-5.6.0-csv](https://csr.s3-us-west-1.amazonaws.com/conceptnet.en.csv) | English tuples extracted from the full conceptnet with merged relations |
+| ConceptNet (NetworkX format) | [conceptnet-5.6.0-networkx](https://csr.s3-us-west-1.amazonaws.com/conceptnet.en.pruned.graph) | NetworkX pickled format, pruned by filtering out stop words  |
 
 ### Entity Embeddings (Node Features)
 
