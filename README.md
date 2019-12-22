@@ -21,19 +21,26 @@ Each model supports the following text encoders:
 
 ## Resources
 
-### ConceptNet Embeddings (Node Features)
+We provide preprocessed ConceptNet and pretrained entity embeddings for your own usage. These resources are independent of the source code.
 
-ConceptNet version == 5.6.0
+### ConceptNet (5.6.0)
 
-**Entity Vocab:** [ent-vocab]()
+| Description                  | Downloads                     | Notes                                                        |
+| ---------------------------- | ----------------------------- | ------------------------------------------------------------ |
+| Entity Vocab                 | [entity-vocab]()              | one entity per line, space replaced by '_'                   |
+| Relation Vocab               | [relation-vocab]()            | one relation per line, merged                                |
+| ConceptNet (CSV format)      | [conceptnet-5.6.0-csv]()      | English tuples extracted from the full conceptnet with merged relations |
+| ConceptNet (NetworkX format) | [conceptnet-5.6.0-networkx]() | NetworkX pickled format, pruned by filtering out stop words  |
 
-**Relation Vocab (merged, for TransE only):** [rel-vocab]()
+### Entity Embeddings (Node Features)
+
+Entity embeddings are packed into a matrix of shape (#ent, dim) and stored in numpy format. Use `np.load` to read the file. You may need to download the vocabulary files first.
 
 | Embedding Model | Dimensionality | Description                                               | Downloads                                                    |
 | --------------- | -------------- | --------------------------------------------------------- | ------------------------------------------------------------ |
 | TransE          | 100            | Obtained using OpenKE with optim=sgd, lr=1e-3, epoch=1000 | [entities](<https://csr.s3-us-west-1.amazonaws.com/glove.transe.sgd.ent.npy>) [relations](<https://csr.s3-us-west-1.amazonaws.com/glove.transe.sgd.rel.npy>) |
-| NumberBatch     | 100            | <https://github.com/commonsense/conceptnet-numberbatch>   | [entities]()                                                 |
-| BERT-based      | 1024           | Provided by Zhengwei                                      | [entities]()                                                 |
+| NumberBatch     | 300            | <https://github.com/commonsense/conceptnet-numberbatch>   | [entities](<https://csr.s3-us-west-1.amazonaws.com/concept.nb.npy>) |
+| BERT-based      | 1024           | Provided by Zhengwei                                      | [entities](https://csr.s3-us-west-1.amazonaws.com/tzw.ent.npy) |
 
 
 
@@ -148,22 +155,23 @@ Each graph encoding model is implemented in a single script:
 
 Some important command line arguments are listed as follows (run `python {lm,rn,rgcn,...}.py -h` for a complete list):
 
-| Arg                             | Values                                                     | Description             | Notes                                                        |
-| ------------------------------- | ---------------------------------------------------------- | ----------------------- | ------------------------------------------------------------ |
-| `--mode`                        | {train, eval, ...}                                         | Training or Evaluation  | default=train                                                |
-| `-enc, --encoder`               | {lstm, openai-gpt, bert-large-unased, roberta-large, ....} | Text Encoer             | Model names (except for lstm) are the ones used by [huggingface-transformers](<https://github.com/huggingface/transformers>), default=bert-large-uncased |
-| `--optim`                       | {adam, adamw, radam}                                       | Optimizer               | default=radam                                                |
-| `-ds, --dataset`                | {csqa, obqa}                                               | Dataset                 | default=csqa                                                 |
-| `-ih, --inhouse`                | {0, 1}                                                     | Run In-house Split      | default=1, only applicable to CSQA                           |
-| `--ent_emb`                     | {transe, numberbatch, tzw}                                 | Entity Embeddings       | default=tzw (BERT-based node features)                       |
-| `-sl, --max_seq_len`            | {32, 64, 128, 256}                                         | Maximum Sequence Length | Use 128 or 256 for datasets that contain long sentences! default=64 |
-| `-elr, --encoder_lr`            | {1e-5, 2e-5, 3e-5, 6e-5, 1e-4}                             | Text Encoder LR         | default values in `utils/parser_utils.py`                    |
-| `-dlr, --decoder_lr`            | {1e-4, 3e-4, 1e-3, 3e-3}                                   | Graph Encoder LR        | default values in `{script}.py`                              |
-| `--lr_schedule`                 | {fixed, warmup_linear, warmup_constant}                    | Learning Rate Schedule  | default=fixed                                                |
-| `-me, --max_epochs_before_stop` | {2, 4, 6}                                                  | Early Stopping Patience | default=2                                                    |
-| `-bs, --batch_size`             | {16, 32, 64}                                               | Batch Size              | default=32                                                   |
-| `--save_dir`                    | str                                                        | Checkpoint Directory    |                                                              |
-| `--seed`                        | {0, 1, 2, 3}                                               | Random Seed             | default=0                                                    |
+| Arg                             | Values                                                     | Description                      | Notes                                                        |
+| ------------------------------- | ---------------------------------------------------------- | -------------------------------- | ------------------------------------------------------------ |
+| `--mode`                        | {train, eval, ...}                                         | Training or Evaluation           | default=train                                                |
+| `-enc, --encoder`               | {lstm, openai-gpt, bert-large-unased, roberta-large, ....} | Text Encoer                      | Model names (except for lstm) are the ones used by [huggingface-transformers](<https://github.com/huggingface/transformers>), default=bert-large-uncased |
+| `--optim`                       | {adam, adamw, radam}                                       | Optimizer                        | default=radam                                                |
+| `-ds, --dataset`                | {csqa, obqa}                                               | Dataset                          | default=csqa                                                 |
+| `-ih, --inhouse`                | {0, 1}                                                     | Run In-house Split               | default=1, only applicable to CSQA                           |
+| `--ent_emb`                     | {transe, numberbatch, tzw}                                 | Entity Embeddings                | default=tzw (BERT-based node features)                       |
+| `-sl, --max_seq_len`            | {32, 64, 128, 256}                                         | Maximum Sequence Length          | Use 128 or 256 for datasets that contain long sentences! default=64 |
+| `-elr, --encoder_lr`            | {1e-5, 2e-5, 3e-5, 6e-5, 1e-4}                             | Text Encoder LR                  | dataset specific and text encoder specific, default values in `utils/parser_utils.py` |
+| `-dlr, --decoder_lr`            | {1e-4, 3e-4, 1e-3, 3e-3}                                   | Graph Encoder LR                 | dataset specific and model specific, default values in `{model}.py` |
+| `--lr_schedule`                 | {fixed, warmup_linear, warmup_constant}                    | Learning Rate Schedule           | default=fixed                                                |
+| `-me, --max_epochs_before_stop` | {2, 4, 6}                                                  | Early Stopping Patience          | default=2                                                    |
+| `--unfreeze_epoch`              | {0, 3}                                                     | Freeze Text Encoder for N epochs | model specific                                               |
+| `-bs, --batch_size`             | {16, 32, 64}                                               | Batch Size                       | default=32                                                   |
+| `--save_dir`                    | str                                                        | Checkpoint Directory             | model specific                                               |
+| `--seed`                        | {0, 1, 2, 3}                                               | Random Seed                      | default=0                                                    |
 
 For example, run the following command to train a RoBERTa-Large model on CommonsenseQA:
 
@@ -193,5 +201,11 @@ python {lm,rn,rgcn,...}.py --mode eval [ --save_dir path/to/directory/ ]
 - Create a directory in `data/{yourdataset}/` to store the .jsonl files
 - Modify `preprocess.py` and perform subgraph extraction for your data
 - Modify `utils/parser_utils.py` to support your own dataset
-- Tune `encoder_lr`,`decoder_lr` and other important hyperparameters
+- Tune `encoder_lr`,`decoder_lr` and other important hyperparameters, modify `utils/parser_utils.py` and `{model}.py` to record the tuned hyperparameters
+
+
+
+## TODO
+
+This repo is currently under construction.
 
