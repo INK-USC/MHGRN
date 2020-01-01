@@ -13,6 +13,7 @@ from utils.parser_utils import *
 from utils.optimization_utils import OPTIMIZER_CLASSES
 from tqdm import tqdm
 
+DECODER_DEFAULT_LR = {'csqa': 1e-3, 'obqa': 1e-3}
 
 def evaluate_accuracy(eval_set, model):
     n_samples, n_correct = 0, 0
@@ -45,9 +46,10 @@ def main():
     parser.add_argument('--gamma', type=float, default=0.5, help='ratio')
     parser.add_argument('--freeze_ent_emb', default=True, type=bool_flag, nargs='?', const=True, help='freeze entity embedding layer')
     parser.add_argument('--init_range', default=0.02, type=float, help='stddev when initializing with normal distribution')
-    parser.add_argument('--decoder_hidden_size', default=1024, type=int, help='number of LSTM hidden units')
     parser.add_argument('--decoder_num_layers', default=2, type=int)
     parser.add_argument('--decoder_bidirectional', default=True, type=bool_flag, nargs='?', const=True)
+    parser.add_argument('--cpt_out_dim', type=int, default=300, help='num of dimension for concepts in processing')
+    parser.add_argument('--subsample', default=1.0, type=float)
 
     # regularization
     parser.add_argument('--d_dropoute', type=float, default=0.1, help='dropout to remove words from embedding layer (0 = no dropout)')
@@ -57,12 +59,15 @@ def main():
     parser.add_argument('--d_dropoutm', type=float, default=0.1, help='dropout for mlp hidden units (0 = no dropout')
 
     # optimization
-    parser.add_argument('-dlr', '--decoder_lr', default=3e-4, type=float, help='learning rate')
-    parser.add_argument('-mbs', '--mini_batch_size', default=2, type=int)
-    parser.add_argument('-ebs', '--eval_batch_size', default=8, type=int)
-    parser.add_argument('--unfreeze_epoch', default=3, type=int)
-    parser.add_argument('--refreeze_epoch', default=5, type=int)
+    parser.add_argument('-dlr', '--decoder_lr', default=DECODER_DEFAULT_LR[args.dataset], type=float, help='learning rate')
+    parser.add_argument('-mbs', '--mini_batch_size', default=1, type=int)
+    parser.add_argument('-ebs', '--eval_batch_size', default=4, type=int)
+    parser.add_argument('--unfreeze_epoch', default=0, type=int)
+    parser.add_argument('--refreeze_epoch', default=10000, type=int)
 
+    parser.add_argument('-h', '--help', action='help', default=argparse.SUPPRESS, help='show this help message and exit')
+    parser.add_argument('--save', type=bool_flag, default=False, help='whether to save logs and models')
+    parser.add_argument('--use_single_gpu', type=bool_flag, default=True)
     args = parser.parse_args()
     if args.debug:
         parser.set_defaults(batch_size=1, log_interval=1, eval_interval=5)
@@ -112,10 +117,11 @@ def train(args):
     config_path = os.path.join(args.save_dir, 'config.json')
     model_path = os.path.join(args.save_dir, 'model.pt')
     log_path = os.path.join(args.save_dir, 'log.csv')
-    export_config(args, config_path)
-    check_path(model_path)
-    with open(log_path, 'w') as fout:
-        fout.write('step,train_acc,dev_acc\n')
+    if args.save:
+        export_config(args, config_path)
+        check_path(model_path)
+        with open(log_path, 'w') as fout:
+            fout.write('step,train_acc,dev_acc\n')
 
     ###################################################################################################
     #   Load data                                                                                     #
@@ -124,23 +130,25 @@ def train(args):
     cp_emb, rel_emb = [np.load(path) for path in args.ent_emb_paths], np.load(args.rel_emb_path)
     cp_emb = np.concatenate(cp_emb, axis=1)
     cp_emb = torch.tensor(cp_emb)
-    rel_emb = np.concatenate((rel_emb, -rel_emb), 0)
-    rel_emb = torch.tensor(rel_emb)
 
     concept_num, concept_dim = cp_emb.size(0), cp_emb.size(1)
     print('num_concepts: {}, concept_dim: {}'.format(concept_num, concept_dim))
-    relation_num, relation_dim = rel_emb.size(0), rel_emb.size(1)
-    print('num_relations: {}, relation_dim: {}'.format(relation_num, relation_dim))
+    relation_num = len(rel_emb) * 2
+    print('num_relations: {}'.format(relation_num))
 
     try:
         device0 = torch.device("cuda:0" if torch.cuda.is_available() and args.cuda else "cpu")
-        device1 = torch.device("cuda:1" if torch.cuda.is_available() and args.cuda else "cpu")
+        if args.use_single_gpu:
+            device1 = device0
+        else:
+            device1 = torch.device("cuda:1" if torch.cuda.is_available() and args.cuda else "cpu")
         dataset = KVMDataLoader(train_statement_path=args.train_statements, train_triple_pk=args.train_triples,
                                 dev_statement_path=args.dev_statements, dev_triple_pk=args.dev_triples,
                                 test_statement_path=args.test_statements, test_triple_pk=args.test_triples,
                                 concept2id_path=args.cpnet_vocab_path, batch_size=args.batch_size, eval_batch_size=args.eval_batch_size,
                                 device=(device0, device1), model_name=args.encoder, max_triple_num=args.max_triple_num,
-                                max_seq_length=args.max_seq_len, is_inhouse=args.inhouse, inhouse_train_qids_path=args.inhouse_train_qids)
+                                max_seq_length=args.max_seq_len, is_inhouse=args.inhouse, inhouse_train_qids_path=args.inhouse_train_qids,
+                                subsample=args.subsample)
 
         print('len(train_set): {}   len(dev_set): {}   len(test_set): {}'.format(dataset.train_size(), dataset.dev_size(), dataset.test_size()))
         print()
@@ -151,10 +159,9 @@ def train(args):
 
         lstm_config = get_lstm_config_from_args(args)
         model = LMKVM(model_name=args.encoder, gamma=args.gamma,
-                      concept_num=concept_num, concept_dim=concept_dim, concept_emb=cp_emb,
-                      relation_num=relation_num, relation_dim=relation_dim, relation_emb=rel_emb,
-                      decoder_hidden_size=args.decoder_hidden_size, decoder_num_layers=args.decoder_num_layers,
-                      decoder_bidirectional=args.decoder_bidirectional,
+                      concept_num=concept_num, concept_dim=args.cpt_out_dim, concept_in_dim=concept_dim, freeze_ent_emb=args.freeze_ent_emb, concept_emb=cp_emb,
+                      relation_num=relation_num,
+                      decoder_num_layers=args.decoder_num_layers, decoder_bidirectional=args.decoder_bidirectional,
                       decoder_input_p=args.d_dropouti, decoder_output_p=args.d_dropouto,
                       decoder_emb_p=args.d_dropoute, decoder_hidden_p=args.d_dropoutr, decoder_mlp_p=args.d_dropoutm,
                       encoder_config=lstm_config)
@@ -254,19 +261,19 @@ def train(args):
             model.eval()
             dev_acc = evaluate_accuracy(dataset.dev(), model)
             test_acc = evaluate_accuracy(dataset.test(), model) if args.test_statements else 0.0
-            if args.eval_train:
-                train_acc = evaluate_accuracy(dataset.train(), model)
             print('-' * 71)
-            print('| step {:5} | train_acc {:7.4f} | dev_acc {:7.4f} | test_acc {:7.4f} |'.format(global_step, train_acc if args.eval_train else 0.0, dev_acc, test_acc))
+            print('| epoch {:5} | dev_acc {:7.4f} | test_acc {:7.4f} |'.format(epoch_id, dev_acc, test_acc))
             print('-' * 71)
-            with open(log_path, 'a') as fout:
-                fout.write('{},{},{}\n'.format(global_step, dev_acc, test_acc))
+            if args.save:
+                with open(log_path, 'a') as fout:
+                    fout.write('{},{},{}\n'.format(global_step, dev_acc, test_acc))
             if dev_acc >= best_dev_acc:
                 best_dev_acc = dev_acc
                 final_test_acc = test_acc
                 best_dev_epoch = epoch_id
-                torch.save([model, args], model_path)
-                print(f'model saved to {model_path}')
+                if args.save:
+                    torch.save([model, args], model_path)
+                    print(f'model saved to {model_path}')
             model.train()
             start_time = time.time()
             if epoch_id > args.unfreeze_epoch and epoch_id - best_dev_epoch >= args.max_epochs_before_stop:

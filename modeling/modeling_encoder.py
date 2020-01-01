@@ -76,7 +76,7 @@ class LSTMTextEncoder(nn.Module):
 class TextEncoder(nn.Module):
     valid_model_types = set(MODEL_CLASS_TO_NAME.keys())
 
-    def __init__(self, model_name, output_token_states=False, **kwargs):
+    def __init__(self, model_name, output_token_states=False, from_checkpoint=None, **kwargs):
         super().__init__()
         self.model_type = MODEL_NAME_TO_CLASS[model_name]
         self.output_token_states = output_token_states
@@ -87,6 +87,8 @@ class TextEncoder(nn.Module):
             self.sent_dim = self.module.output_size
         else:
             self.module = AutoModel.from_pretrained(model_name, output_hidden_states=True)
+            if from_checkpoint is not None:
+                self.module = self.module.from_pretrained(from_checkpoint, output_hidden_states=True)
             if self.model_type in ('gpt',):
                 self.module.resize_token_embeddings(get_gpt_token_num())
             self.sent_dim = self.module.config.n_embd if self.model_type in ('gpt',) else self.module.config.hidden_size

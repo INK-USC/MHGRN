@@ -11,36 +11,34 @@ from utils.data_utils import *
 
 
 class KVM(nn.Module):
-    def __init__(self, concept_num, concept_dim, pretrained_concept_emb, relation_num, relation_dim,
-                 pretrained_relation_emb, hidden_dim, s_dim, num_layers, bidirectional,
+    def __init__(self, concept_num, concept_dim, concept_in_dim, freeze_ent_emb, pretrained_concept_emb, relation_num, s_dim, num_layers, bidirectional,
                  input_p, output_p, emb_p, hidden_p, dropoutm, mask_with_s_len, gamma=0.5):
         super().__init__()
 
-        self.concept_dim = concept_dim
-        self.concept_emb = nn.Embedding(concept_num, concept_dim)
-        self.relation_dim = relation_dim
-        self.relation_emb = nn.Embedding(relation_num, relation_dim)
-        self.hidden_dim = hidden_dim
+        self.concept_emb = CustomizedEmbedding(concept_num=concept_num, concept_out_dim=concept_dim, concept_in_dim=concept_in_dim,
+                                               pretrained_concept_emb=pretrained_concept_emb, freeze_ent_emb=freeze_ent_emb, use_contextualized=False)
+        self.relation_emb = CustomizedEmbedding(concept_num=relation_num, concept_out_dim=concept_dim, concept_in_dim=concept_dim,
+                                                pretrained_concept_emb=None, freeze_ent_emb=False, use_contextualized=False)
+        self.hidden_dim = concept_dim
         self.s_dim = s_dim
         self.gamma = gamma
         self.mask_with_s_len = mask_with_s_len
+
 
         if self.s_dim != self.hidden_dim:
             print(f'sentence dim: {self.s_dim}')
             print(f'triple repr dim: {self.hidden_dim}')
             print('The dimension of token representation and output of triple encoder doesn\'t match, linear transformation applied.')
-            self.transform = nn.Linear(self.hidden_dim, self.s_dim)
+            self.transform = nn.Linear(self.s_dim, self.hidden_dim)
 
         self.sim = DotProductSimilarity()
         self.attention = MatrixAttention(self.sim)
-        self.triple_encoder = TripleEncoder(emb_dim=concept_dim, cpt_emb_num=concept_num, rel_emb_num=relation_num,
-                                            hidden_dim=hidden_dim, input_p=input_p, output_p=output_p,
+        self.triple_encoder = TripleEncoder(emb_dim=concept_dim, hidden_dim=self.hidden_dim, input_p=input_p, output_p=output_p,
                                             hidden_p=hidden_p, num_layers=num_layers, bidirectional=bidirectional,
-                                            emb_p=emb_p, pad=False, pretrained_concept_emb=pretrained_concept_emb,
-                                            pretrained_relation_emb=pretrained_relation_emb)
+                                            pad=False, concept_emb=self.concept_emb, relation_emb=self.relation_emb)
         # self.MLP = MLP(input_size=4 * concept_dim, hidden_size=hidden_dim, output_size=hidden_dim, num_layers=1, dropout=dropoutm)
         # self.hidd2out = MLP(input_size=4*hidden_dim+s_dim, hidden_size=hidden_dim, output_size=1, num_layers=1, dropout=dropout)
-        self.hidd2out = nn.Linear(s_dim, 1)
+        self.hidd2out = nn.Linear(self.hidden_dim, 1)
         self.max_pool = MaxPoolLayer()
         # self.mean_pool = MeanPoolLayer()
 
@@ -68,7 +66,8 @@ class KVM(nn.Module):
         mask = s_mask.unsqueeze(2) | t_mask.unsqueeze(1)  # (nbz, s_sl, t_sl)
         t_repr = self.triple_encoder(t.view(bz * t_sl, 3)).view(bz, t_sl, -1)  # (nbz, t_sl, h_dim)
         if self.s_dim != self.hidden_dim:
-            t_repr = self.transform(t_repr)
+            s = self.transform(s)
+
         attn = self.attention(s, t_repr)  # (nbz, s_sl, t_sl)
 
         s2t = masked_softmax(attn, mask, dim=-1)  # (nbz, s_sl, t_sl)
@@ -84,16 +83,17 @@ class KVM(nn.Module):
 
 
 class LMKVM(nn.Module):
-    def __init__(self, model_name, concept_num, concept_dim, concept_emb, relation_num, relation_dim, relation_emb,
-                 decoder_hidden_size, decoder_num_layers, decoder_bidirectional, decoder_input_p, decoder_output_p, decoder_emb_p, decoder_hidden_p,
+    def __init__(self, model_name, concept_num, concept_dim, concept_in_dim, freeze_ent_emb, concept_emb, relation_num,
+                 decoder_num_layers, decoder_bidirectional, decoder_input_p, decoder_output_p, decoder_emb_p, decoder_hidden_p,
                  decoder_mlp_p, gamma, encoder_config={}):
         super().__init__()
         self.model_name = model_name
         mask_with_s_len = model_name in ('lstm',)
         self.encoder = TextEncoder(model_name, output_token_states=True, **encoder_config)
-        self.decoder = KVM(concept_num=concept_num, concept_dim=concept_dim, pretrained_concept_emb=concept_emb,
-                           relation_num=relation_num, relation_dim=relation_dim, pretrained_relation_emb=relation_emb,
-                           hidden_dim=decoder_hidden_size, s_dim=self.encoder.sent_dim, num_layers=decoder_num_layers, bidirectional=decoder_bidirectional,
+        self.decoder = KVM(concept_num=concept_num, concept_dim=concept_dim, concept_in_dim=concept_in_dim,
+                           freeze_ent_emb=freeze_ent_emb, pretrained_concept_emb=concept_emb,
+                           relation_num=relation_num,
+                           s_dim=self.encoder.sent_dim, num_layers=decoder_num_layers, bidirectional=decoder_bidirectional,
                            input_p=decoder_input_p, output_p=decoder_output_p, emb_p=decoder_emb_p, hidden_p=decoder_hidden_p,
                            dropoutm=decoder_mlp_p, gamma=gamma, mask_with_s_len=mask_with_s_len)
 
@@ -118,7 +118,8 @@ class KVMDataLoader(object):
     def __init__(self, train_statement_path: str, train_triple_pk: str, dev_statement_path: str,
                  dev_triple_pk: str, test_statement_path: str, test_triple_pk: str,
                  concept2id_path: str, batch_size, eval_batch_size, device, model_name=None,
-                 max_triple_num=200, max_seq_length=128, is_inhouse=True, inhouse_train_qids_path=None):
+                 max_triple_num=200, max_seq_length=128, is_inhouse=True, inhouse_train_qids_path=None,
+                 subsample=1.0):
         super().__init__()
         self.batch_size = batch_size
         self.eval_batch_size = eval_batch_size
@@ -151,6 +152,19 @@ class KVMDataLoader(object):
         assert all(len(self.dev_qids) == x.size(0) for x in [self.dev_labels] + self.dev_encoder_data + list(self.dev_decoder_data))
         if test_statement_path is not None:
             assert all(len(self.test_qids) == x.size(0) for x in [self.test_labels] + self.test_encoder_data + list(self.test_decoder_data))
+        assert 0. < subsample <= 1.
+        if subsample < 1.:
+            n_train = int(self.train_size() * subsample)
+            assert n_train > 0
+            if self.is_inhouse:
+                self.inhouse_train_indexes = self.inhouse_train_indexes[:n_train]
+            else:
+                self.train_qids = self.train_qids[:n_train]
+                self.train_labels = self.train_labels[:n_train]
+                self.train_encoder_data = [x[:n_train] for x in self.train_encoder_data]
+                self.train_decoder_data = [x[:n_train] for x in self.train_decoder_data]
+                assert all(len(self.train_qids) == x.size(0) for x in [self.train_labels] + self.train_encoder_data + self.train_decoder_data)
+            assert self.train_size() == n_train
 
     def __getitem__(self, index):
         raise NotImplementedError()

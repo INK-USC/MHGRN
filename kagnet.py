@@ -83,8 +83,9 @@ def main():
     parser.add_argument('-mbs', '--mini_batch_size', default=4, type=int)
     parser.add_argument('-ebs', '--eval_batch_size', default=4, type=int)
     parser.add_argument('--unfreeze_epoch', default=3, type=int)
-    parser.add_argument('--refreeze_epoch', default=5, type=int)
+    parser.add_argument('--refreeze_epoch', default=10000, type=int)
 
+    parser.add_argument('-h', '--help', action='help', default=argparse.SUPPRESS, help='show this help message and exit')
     args = parser.parse_args()
     if args.mode == 'train':
         train(args)

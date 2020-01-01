@@ -87,10 +87,10 @@ def extract_bert_node_features_from_adj(cpnet_vocab_path, statement_path, adj_pa
                         all_span.append(span)
 
         assert len(adj_data) == 0
+        check_path(cache_path)
         with open(cache_path, 'wb') as fout:
             pickle.dump((all_input_ids, all_input_mask, all_segment_ids, all_span, offsets), fout)
         print('Inputs dumped')
-
 
     all_input_ids, all_input_mask, all_segment_ids, all_span = [torch.tensor(x, dtype=torch.long) for x in [all_input_ids, all_input_mask, all_segment_ids, all_span]]
     all_span = all_span.to(device)

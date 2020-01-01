@@ -12,17 +12,13 @@ from utils.data_utils import *
 
 
 class GconAttn(nn.Module):
-    def __init__(self, concept_num, concept_dim, pretrained_concept_emb, hidden_dim, sent_dim, dropout):
+    def __init__(self, concept_num, concept_dim, concept_in_dim, pretrained_concept_emb, freeze_ent_emb, hidden_dim, sent_dim, dropout):
         super().__init__()
-        self.concept_dim = concept_dim
-        self.concept_emb = nn.Embedding(concept_num, concept_dim)
+        self.concept_emb = CustomizedEmbedding(concept_num=concept_num, concept_out_dim=concept_dim, concept_in_dim=concept_in_dim,
+                                               pretrained_concept_emb=pretrained_concept_emb, freeze_ent_emb=freeze_ent_emb, use_contextualized=False)
         self.hidden_dim = hidden_dim
         self.sent_dim = sent_dim
-        if pretrained_concept_emb is not None:
-            self.concept_emb.weight.data.copy_(pretrained_concept_emb)
-        else:
-            bias = np.sqrt(6.0 / concept_dim)
-            nn.init.uniform_(self.concept_emb.weight, -bias, bias)
+
         self.sim = DotProductSimilarity()
         self.attention = MatrixAttention(self.sim)
         self.MLP = MLP(input_size=4 * concept_dim, hidden_size=hidden_dim, output_size=hidden_dim, num_layers=1, dropout=dropout)
@@ -73,11 +69,12 @@ class GconAttn(nn.Module):
 
 
 class LMGconAttn(nn.Module):
-    def __init__(self, model_name, concept_num, concept_dim, pretrained_concept_emb, hidden_dim, dropout, ablation=None, encoder_config={}):
+    def __init__(self, model_name, concept_num, concept_dim, concept_in_dim, freeze_ent_emb, pretrained_concept_emb, hidden_dim, dropout, ablation=None, encoder_config={}):
         super().__init__()
         self.model_name = model_name
         self.encoder = TextEncoder(model_name, **encoder_config)
-        self.decoder = GconAttn(concept_num=concept_num, concept_dim=concept_dim, pretrained_concept_emb=pretrained_concept_emb,
+        self.decoder = GconAttn(concept_num=concept_num, concept_dim=concept_dim, concept_in_dim=concept_in_dim,
+                                freeze_ent_emb=freeze_ent_emb, pretrained_concept_emb=pretrained_concept_emb,
                                 hidden_dim=hidden_dim, sent_dim=self.encoder.sent_dim, dropout=dropout)
 
     def forward(self, *inputs, layer_id=-1):
@@ -96,7 +93,8 @@ class GconAttnDataLoader(object):
     def __init__(self, train_statement_path: str, train_concept_jsonl: str, dev_statement_path: str,
                  dev_concept_jsonl: str, test_statement_path: str, test_concept_jsonl: str,
                  concept2id_path: str, batch_size, eval_batch_size, device, model_name=None,
-                 max_cpt_num=20, max_seq_length=128, is_inhouse=True, inhouse_train_qids_path=None):
+                 max_cpt_num=20, max_seq_length=128, is_inhouse=True, inhouse_train_qids_path=None,
+                 subsample=1.0):
         super().__init__()
         self.batch_size = batch_size
         self.eval_batch_size = eval_batch_size
@@ -130,6 +128,18 @@ class GconAttnDataLoader(object):
         assert all(len(self.dev_qids) == x.size(0) for x in [self.dev_labels] + self.dev_data)
         if test_statement_path is not None:
             assert all(len(self.test_qids) == x.size(0) for x in [self.test_labels] + self.test_data)
+        assert 0. < subsample <= 1.
+        if subsample < 1.:
+            n_train = int(self.train_size() * subsample)
+            assert n_train > 0
+            if self.is_inhouse:
+                self.inhouse_train_indexes = self.inhouse_train_indexes[:n_train]
+            else:
+                self.train_qids = self.train_qids[:n_train]
+                self.train_labels = self.train_labels[:n_train]
+                self.train_data = [x[:n_train] for x in self.train_data]
+                assert all(len(self.train_qids) == x.size(0) for x in [self.train_labels] + self.train_data)
+            assert self.train_size() == n_train
 
     def __getitem__(self, index):
         raise NotImplementedError()

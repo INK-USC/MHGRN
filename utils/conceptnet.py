@@ -5,14 +5,13 @@ import math
 from tqdm import tqdm
 import numpy as np
 import sys
+
 try:
     from .utils import check_file
 except ImportError:
     from utils import check_file
 
-
 __all__ = ['extract_english', 'construct_graph', 'merged_relations']
-
 
 relation_groups = [
     'atlocation/locatednear',
@@ -52,6 +51,26 @@ merged_relations = [
     'receivesaction',
     'relatedto',
     'usedfor',
+]
+
+relation_text = [
+    'is the antonym of',
+    'is at location of',
+    'is capable of',
+    'causes',
+    'is created by',
+    'is a kind of',
+    'desires',
+    'has subevent',
+    'is part of',
+    'has context',
+    'has property',
+    'is made of',
+    'is not capable of',
+    'does not desires',
+    'is',
+    'is related to',
+    'is used for',
 ]
 
 
@@ -142,7 +161,7 @@ def construct_graph(cpnet_csv_path, cpnet_vocab_path, output_path, prune=True):
     nltk_stopwords += ["like", "gone", "did", "going", "would", "could",
                        "get", "in", "up", "may", "wanter"]  # issue: mismatch with the stop words in grouding.py
 
-    blacklist = set(["uk", "us", "take", "make", "object", "person", "people"])   # issue: mismatch with the blacklist in grouding.py
+    blacklist = set(["uk", "us", "take", "make", "object", "person", "people"])  # issue: mismatch with the blacklist in grouding.py
 
     concept2id = {}
     id2concept = {}
@@ -177,8 +196,8 @@ def construct_graph(cpnet_csv_path, cpnet_vocab_path, output_path, prune=True):
             if prune and (not_save(ls[1]) or not_save(ls[2]) or id2relation[rel] == "hascontext"):
                 continue
             # if id2relation[rel] == "relatedto" or id2relation[rel] == "antonym":
-                # weight -= 0.3
-                # continue
+            # weight -= 0.3
+            # continue
             if subj == obj:  # delete loops
                 continue
             # weight = 1 + float(math.exp(1 - weight))  # issue: ???
@@ -195,7 +214,6 @@ def construct_graph(cpnet_csv_path, cpnet_vocab_path, output_path, prune=True):
 
 
 def glove_init(input, output, concept_file):
-
     embeddings_file = output + '.npy'
     vocabulary_file = output.split('.')[0] + '.vocab.txt'
     output_dir = '/'.join(output.split('/')[:-1])
@@ -226,7 +244,6 @@ def glove_init(input, output, concept_file):
     if not vocab_exist:
         with open(vocabulary_file, 'wb') as f:
             f.write(text.encode('utf-8'))
-
 
     def load_glove_from_npy(glove_vec_path, glove_vocab_path):
         vectors = np.load(glove_vec_path)
@@ -272,7 +289,6 @@ def glove_init(input, output, concept_file):
 
     def create_embeddings_glove(pooling="max", dim=100):
         print("Pooling: " + pooling)
-
 
         with open(concept_file, "r", encoding="utf8") as f:
             triple_str_json = json.load(f)
@@ -370,5 +386,5 @@ def glove_init(input, output, concept_file):
     create_embeddings_glove(dim=dim)
 
 
-if __name__=="__main__":
+if __name__ == "__main__":
     glove_init("../data/glove/glove.6B.200d.txt", "../data/glove/glove.200d", '../data/glove/tp_str_corpus.json')

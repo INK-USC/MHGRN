@@ -1,10 +1,10 @@
-import torch
-import numpy as np
-import json
 import pickle
-from tqdm import tqdm
+
 import dgl
+import numpy as np
+import torch
 from transformers import (OpenAIGPTTokenizer, BertTokenizer, XLNetTokenizer, RobertaTokenizer)
+
 from utils.tokenization_utils import *
 
 GPT_SPECIAL_TOKENS = ['_start_', '_delimiter_', '_classify_']
@@ -125,6 +125,7 @@ class AdjDataBatchGenerator(object):
 
 class MultiGPUAdjDataBatchGenerator(object):
     """
+    this version DOES NOT add the identity matrix
     tensors0, lists0  are on device0
     tensors1, lists1, adj, labels  are on device1
     """
@@ -150,7 +151,6 @@ class MultiGPUAdjDataBatchGenerator(object):
     def __iter__(self):
         batch_adj = self.adj_empty  # (batch_size, num_choice, n_rel, n_node, n_node)
         batch_adj[:] = 0
-        batch_adj[:, :, -1] = torch.eye(batch_adj.size(-1), dtype=torch.float32, device=self.device1)
         bs = self.batch_size
         n = self.indexes.size(0)
         for a in range(0, n, bs):
@@ -163,7 +163,7 @@ class MultiGPUAdjDataBatchGenerator(object):
             batch_lists0 = [self._to_device([x[i] for i in batch_indexes], self.device0) for x in self.lists0]
             batch_lists1 = [self._to_device([x[i] for i in batch_indexes], self.device1) for x in self.lists1]
 
-            batch_adj[:, :, :-1] = 0
+            batch_adj[:] = 0
             for batch_id, global_id in enumerate(batch_indexes):
                 for choice_id, (i, j, k) in enumerate(self.adj_data[global_id]):
                     batch_adj[batch_id, choice_id, i, j, k] = 1
@@ -235,7 +235,7 @@ class MultiGPUNxgDataBatchGenerator(object):
             return obj.to(device)
 
 
-def load_2hop_relational_paths(input_jsonl_path, max_tuple_num, num_choice=None):
+def load_2hop_relational_paths_old(input_jsonl_path, max_tuple_num, num_choice=None):
     with open(input_jsonl_path, 'r') as fin:
         rpath_data = [json.loads(line) for line in fin]
     n_samples = len(rpath_data)
@@ -268,42 +268,28 @@ def load_2hop_relational_paths(input_jsonl_path, max_tuple_num, num_choice=None)
     return qa_data, rel_data, num_tuples
 
 
-def load_2hop_relational_paths_w_emb(rpath_jsonl_path, cpt_jsonl_path, emb_pk_path, max_tuple_num, max_cpt_num, num_choice=None):
+def load_2hop_relational_paths(rpath_jsonl_path, cpt_jsonl_path=None, emb_pk_path=None,
+                               max_tuple_num=200, num_choice=None, node_feature_type=None):
     with open(rpath_jsonl_path, 'r') as fin:
         rpath_data = [json.loads(line) for line in fin]
-    print('rpath loaded')
+
     with open(cpt_jsonl_path, 'rb') as fin:
-        adj_concept_pairs = pickle.load(fin)  # (adj, concepts, qm, am)
-    print('cpt loaded')
-    with open(emb_pk_path, 'rb') as fin:
-        all_embs = pickle.load(fin)
-    print('embedding loaded')
-    i = 0
-    while True:
-        if all_embs[i].shape[0] == 0:
-            i += 1
-        else:
-            emb_dim = all_embs[i].shape[1]
-            break
-    assert emb_dim > 0
+        adj_data = pickle.load(fin)  # (adj, concepts, qm, am)
 
     n_samples = len(rpath_data)
     qa_data = torch.zeros((n_samples, max_tuple_num, 2), dtype=torch.long)
     rel_data = torch.zeros((n_samples, max_tuple_num), dtype=torch.long)
     num_tuples = torch.zeros((n_samples,), dtype=torch.long)
-    emb_data = torch.zeros((n_samples, max_cpt_num, emb_dim))
-    maxi = 0
-    for i, (data, cpt) in enumerate(tqdm(zip(rpath_data, adj_concept_pairs), total=n_samples, desc='loading QA pairs')):
-        cpt = cpt[1]  # np.array
-        embs = np.array(all_embs[i], dtype=np.float32)
-        ori_cpt2idx = {c: i for (i, c) in enumerate(cpt)}
-        mask = np.zeros(len(cpt), dtype=np.bool)
+
+    all_masks = []
+    for i, (data, adj) in enumerate(tqdm(zip(rpath_data, adj_data), total=n_samples, desc='loading QA pairs')):
+        concept_ids = adj[1]
+        ori_cpt2idx = {c: i for (i, c) in enumerate(concept_ids)}
+        qa_mask = np.zeros(len(concept_ids), dtype=np.bool)
 
         cur_qa = []
         cur_rel = []
         for dic in data['paths']:
-            mask[ori_cpt2idx[dic['qc']]] = True
-            mask[ori_cpt2idx[dic['ac']]] = True
             if len(dic['rel']) == 1:
                 cur_qa.append([dic['qc'], dic['ac']])
                 cur_rel.append(dic['rel'][0])
@@ -312,43 +298,58 @@ def load_2hop_relational_paths_w_emb(rpath_jsonl_path, cpt_jsonl_path, emb_pk_pa
                 cur_rel.append(34 + dic['rel'][0] * 34 + dic['rel'][1])
             else:
                 raise ValueError('Invalid path length')
+            qa_mask[ori_cpt2idx[dic['qc']]] = True
+            qa_mask[ori_cpt2idx[dic['ac']]] = True
+            if len(cur_qa) >= max_tuple_num:
+                break
         assert len(cur_qa) == len(cur_rel)
-        # print('ori embs', embs.shape)
-        embs = embs[mask]
-        maxi = max(maxi, embs.shape[0])
-        # print('embs', embs.shape)
-        if len(embs) == 0:
-            embs = np.zeros((1, emb_dim), dtype=np.float32)
-        try:
-            assert embs.shape[0] <= max_cpt_num
-        except:
-            print(embs.size())
-            print(max_cpt_num)
-            print(mask.shape)
-            print(mask)
-            exit()
-        cpt = cpt[mask]
-        cpt2idx = {c: i for (i, c) in enumerate(cpt)}
-        cur_qa = [[cpt2idx[q], cpt2idx[a]] for [q, a] in cur_qa]
-        try:
-            assert (torch.tensor(cur_qa) < len(embs)).all()
-        except:
-            print(cur_qa)
-            print(len(embs))
-        cur_qa, cur_rel = cur_qa[:min(max_tuple_num, len(cur_qa))], cur_rel[:min(max_tuple_num, len(cur_rel))]
-        qa_data[i][:len(cur_qa)] = torch.tensor(cur_qa) if cur_qa else torch.zeros((0, 2), dtype=torch.long)
-        rel_data[i][:len(cur_rel)] = torch.tensor(cur_rel) if cur_rel else torch.zeros((0,), dtype=torch.long)
-        num_tuples[i] = (len(cur_qa) + len(cur_rel)) // 2  # code style suggested by kiwisher
-        emb_data[i][:len(embs)] = torch.tensor(embs)
+        all_masks.append(qa_mask)
 
-    print(maxi)
+        if len(cur_qa) > 0:
+            qa_data[i][:len(cur_qa)] = torch.tensor(cur_qa)
+            rel_data[i][:len(cur_rel)] = torch.tensor(cur_rel)
+            num_tuples[i] = (len(cur_qa) + len(cur_rel)) // 2  # code style suggested by kiwisher
+
+    if emb_pk_path is not None:  # use contexualized node features
+        with open(emb_pk_path, 'rb') as fin:
+            all_embs = pickle.load(fin)
+        assert len(all_embs) == len(all_masks) == n_samples
+        max_cpt_num = max(mask.sum() for mask in all_masks)
+        if node_feature_type in ('cls', 'mention'):
+            emb_dim = all_embs[0].shape[1] // 2
+        else:
+            emb_dim = all_embs[0].shape[1]
+        emb_data = torch.zeros((n_samples, max_cpt_num, emb_dim), dtype=torch.float)
+        for idx, (mask, embs) in enumerate(zip(all_masks, all_embs)):
+            assert not any(mask[embs.shape[0]:])
+            masked_concept_ids = adj_data[idx][1][mask]
+            masked_embs = embs[mask[:embs.shape[0]]]
+            cpt2idx = {c: i for (i, c) in enumerate(masked_concept_ids)}
+            for tuple_idx in range(num_tuples[idx].item()):
+                qa_data[idx, tuple_idx, 0] = cpt2idx[qa_data[idx, tuple_idx, 0].item()]
+                qa_data[idx, tuple_idx, 1] = cpt2idx[qa_data[idx, tuple_idx, 1].item()]
+            if node_feature_type in ('cls',):
+                masked_embs = masked_embs[:, :emb_dim]
+            elif node_feature_type in ('mention',):
+                masked_embs = masked_embs[:, emb_dim:]
+            emb_data[idx, :masked_embs.shape[0]] = torch.tensor(masked_embs)
+            assert (qa_data[idx, :num_tuples[idx]] < masked_embs.shape[0]).all()
+
     if num_choice is not None:
         qa_data = qa_data.view(-1, num_choice, max_tuple_num, 2)
         rel_data = rel_data.view(-1, num_choice, max_tuple_num)
-        emb_data = emb_data.view(-1, num_choice, max_cpt_num, emb_dim)
         num_tuples = num_tuples.view(-1, num_choice)
+        if emb_pk_path is not None:
+            emb_data = emb_data.view(-1, num_choice, *emb_data.size()[1:])
 
-    return qa_data, rel_data, num_tuples, emb_data
+    flat_rel_data = rel_data.view(-1, max_tuple_num)
+    flat_num_tuples = num_tuples.view(-1)
+    valid_mask = (torch.arange(max_tuple_num) < flat_num_tuples.unsqueeze(-1)).float()
+    n_1hop_paths = ((flat_rel_data < 34).float() * valid_mask).sum(1)
+    n_2hop_paths = ((flat_rel_data >= 34).float() * valid_mask).sum(1)
+    print('| #paths: {} | average #1-hop paths: {} | average #2-hop paths: {} | #w/ 1-hop {} | #w/ 2-hop {} |'.format(flat_num_tuples.float().mean(0), n_1hop_paths.mean(), n_2hop_paths.mean(),
+                                                                                                                      (n_1hop_paths > 0).float().mean(), (n_2hop_paths > 0).float().mean()))
+    return (qa_data, rel_data, num_tuples, emb_data) if emb_pk_path is not None else (qa_data, rel_data, num_tuples)
 
 
 def load_tokenized_statements(tokenized_path, num_choice, max_seq_len, freq_cutoff, vocab=None):
@@ -374,7 +375,7 @@ def load_tokenized_statements(tokenized_path, num_choice, max_seq_len, freq_cuto
     return statement_data, statement_len, vocab
 
 
-def load_adj_data(adj_pk_path, max_node_num, num_choice):
+def load_adj_data(adj_pk_path, max_node_num, num_choice, emb_pk_path=None):
     with open(adj_pk_path, 'rb') as fin:
         adj_concept_pairs = pickle.load(fin)
 
@@ -384,15 +385,27 @@ def load_adj_data(adj_pk_path, max_node_num, num_choice):
     concept_ids = torch.zeros((n_samples, max_node_num), dtype=torch.long)
     node_type_ids = torch.full((n_samples, max_node_num), 2, dtype=torch.long)
 
+    if emb_pk_path is not None:
+        with open(emb_pk_path, 'rb') as fin:
+            all_embs = pickle.load(fin)
+        emb_data = torch.zeros((n_samples, max_node_num, all_embs[0].shape[1]), dtype=torch.float)
+
     adj_lengths_ori = adj_lengths.clone()
-    for idx, (adj, concepts, qm, am) in tqdm(enumerate(adj_concept_pairs),
-                                             total=n_samples, desc='loading adj matrices'):
+    for idx, (adj, concepts, qm, am) in tqdm(enumerate(adj_concept_pairs), total=n_samples, desc='loading adj matrices'):
+        num_concept = min(len(concepts), max_node_num)
         adj_lengths_ori[idx] = len(concepts)
-        concepts = concepts[:min(len(concepts), max_node_num)]
-        concept_ids[idx, :len(concepts)] = torch.tensor(concepts)  # note : concept zero padding is diabled
-        adj_lengths[idx] = len(concepts)
-        node_type_ids[idx, :len(concepts)][torch.tensor(qm, dtype=torch.uint8)[:len(concepts)]] = 0
-        node_type_ids[idx, :len(concepts)][torch.tensor(am, dtype=torch.uint8)[:len(concepts)]] = 1
+        if emb_pk_path is not None:
+            embs = all_embs[idx]
+            assert embs.shape[0] >= num_concept
+            emb_data[idx, :num_concept] = torch.tensor(embs[:num_concept])
+            concepts = np.arange(num_concept)
+        else:
+            concepts = concepts[:num_concept]
+        concept_ids[idx, :num_concept] = torch.tensor(concepts)  # note : concept zero padding is disabled
+
+        adj_lengths[idx] = num_concept
+        node_type_ids[idx, :num_concept][torch.tensor(qm, dtype=torch.uint8)[:num_concept]] = 0
+        node_type_ids[idx, :num_concept][torch.tensor(am, dtype=torch.uint8)[:num_concept]] = 1
         ij = torch.tensor(adj.row, dtype=torch.int64)
         k = torch.tensor(adj.col, dtype=torch.int64)
         n_node = adj.shape[1]
@@ -403,15 +416,19 @@ def load_adj_data(adj_pk_path, max_node_num, num_choice):
         i, j, k = torch.cat((i, i + half_n_rel), 0), torch.cat((j, k), 0), torch.cat((k, j), 0)  # add inverse relations
         adj_data.append((i, j, k))  # i, j, k are the coordinates of adj's non-zero entries
 
-    print('| adj_len: {:.2f} | ori_adj_len: {:.2f} |'.format(adj_lengths_ori.float().mean().item(), adj_lengths.float().mean().item()) +
+    print('| ori_adj_len: {:.2f} | adj_len: {:.2f} |'.format(adj_lengths_ori.float().mean().item(), adj_lengths.float().mean().item()) +
           ' prune_rate： {:.2f} |'.format((adj_lengths_ori > adj_lengths).float().mean().item()) +
           ' qc_num: {:.2f} | ac_num: {:.2f} |'.format((node_type_ids == 0).float().sum(1).mean().item(),
                                                       (node_type_ids == 1).float().sum(1).mean().item()))
 
     concept_ids, node_type_ids, adj_lengths = [x.view(-1, num_choice, *x.size()[1:]) for x in (concept_ids, node_type_ids, adj_lengths)]
+    if emb_pk_path is not None:
+        emb_data = emb_data.view(-1, num_choice, *emb_data.size()[1:])
     adj_data = list(map(list, zip(*(iter(adj_data),) * num_choice)))
 
-    return concept_ids, node_type_ids, adj_lengths, adj_data, half_n_rel * 2 + 1
+    if emb_pk_path is None:
+        return concept_ids, node_type_ids, adj_lengths, adj_data, half_n_rel * 2 + 1
+    return concept_ids, node_type_ids, adj_lengths, emb_data, adj_data, half_n_rel * 2 + 1
 
 
 def load_gpt_input_tensors(statement_jsonl_path, max_seq_length):
@@ -732,3 +749,16 @@ def load_info(statement_path: str):
         labels = torch.tensor(labels, dtype=torch.long)
 
     return ids, labels, num_choice
+
+
+def load_statement_dict(statement_path):
+    all_dict = {}
+    with open(statement_path, 'r', encoding='utf-8') as fin:
+        for line in fin:
+            instance_dict = json.loads(line)
+            qid = instance_dict['id']
+            all_dict[qid] = {
+                'question': instance_dict['question']['stem'],
+                'answers': [dic['text'] for dic in instance_dict['question']['choices']]
+            }
+    return all_dict

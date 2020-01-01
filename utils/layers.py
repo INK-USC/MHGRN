@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 import numpy as np
 import math
+from utils.utils import freeze_net
 
 
 def gelu(x):
@@ -27,8 +28,6 @@ class TypedLinear(nn.Linear):
         self.in_features = in_features
         self.out_features = out_features
         self.n_type = n_type
-        self.weight.data.uniform_(-np.sqrt(1 / in_features), np.sqrt(1 / in_features))
-        self.bias.data.uniform_(-np.sqrt(1 / in_features), np.sqrt(1 / in_features))
 
     def forward(self, X, type_ids=None):
         """
@@ -234,30 +233,17 @@ class LSTMEncoder(nn.Module):
 
 
 class TripleEncoder(nn.Module):
-    def __init__(self, emb_dim, cpt_emb_num, rel_emb_num, hidden_dim, input_p, output_p, hidden_p, num_layers, emb_p, bidirectional=True, pad=False,
-                 pretrained_concept_emb=None, pretrained_relation_emb=None):
+    def __init__(self, emb_dim, hidden_dim, input_p, output_p, hidden_p, num_layers, bidirectional=True, pad=False,
+                 concept_emb=None, relation_emb=None
+                 ):
         super().__init__()
         if pad:
             raise NotImplementedError
-        self.emb_dim = emb_dim
-        self.cpt_emb_num = cpt_emb_num
-        self.rel_emb_num = rel_emb_num
         self.input_p = input_p
         self.output_p = output_p
         self.hidden_p = hidden_p
-        self.emb_p = emb_p
-        self.cpt_emb = EmbeddingDropout(nn.Embedding(cpt_emb_num, emb_dim), emb_p)
-        self.rel_emb = EmbeddingDropout(nn.Embedding(rel_emb_num, emb_dim), emb_p)
-        if pretrained_concept_emb is not None:
-            self.cpt_emb.emb.weight.data.copy_(pretrained_concept_emb)
-        else:
-            bias = np.sqrt(6.0 / emb_dim)
-            nn.init.uniform_(self.cpt_emb.emb.weight, -bias, bias)
-        if pretrained_relation_emb is not None:
-            self.rel_emb.emb.weight.data.copy_(pretrained_relation_emb)
-        else:
-            bias = np.sqrt(6.0 / emb_dim)
-            nn.init.uniform_(self.rel_emb.emb.weight, -bias, bias)
+        self.cpt_emb = concept_emb
+        self.rel_emb = relation_emb
         self.input_dropout = nn.Dropout(input_p)
         self.output_dropout = nn.Dropout(output_p)
         self.bidirectional = bidirectional
@@ -310,6 +296,28 @@ class MatrixVectorScaledDotProductAttention(nn.Module):
         attn = self.softmax(attn)
         attn = self.dropout(attn)
         output = (attn.unsqueeze(2) * v).sum(1)
+        return output, attn
+
+
+class AttPoolLayer(nn.Module):
+
+    def __init__(self, d_q, d_k, dropout=0.1):
+        super().__init__()
+        self.w_qs = nn.Linear(d_q, d_k)
+        nn.init.normal_(self.w_qs.weight, mean=0, std=np.sqrt(2.0 / (d_q + d_k)))
+        self.attention = MatrixVectorScaledDotProductAttention(temperature=np.power(d_k, 0.5))
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, q, k, mask=None):
+        """
+        q: tensor of shape (b, d_q)
+        k: tensor of shape (b, l, d_k)
+        mask: tensor of shape (b, l) (optional, default None)
+        returns: tensor of shape (b, d_k)
+        """
+        qs = self.w_qs(q)  # (b, d_k)
+        output, attn = self.attention(qs, k, k, mask=mask)
+        output = self.dropout(output)
         return output, attn
 
 
@@ -558,6 +566,45 @@ class MatrixAttention(nn.Module):
                                                       matrix_2.size()[2])
 
         return self._similarity_function(tiled_matrix_1, tiled_matrix_2)
+
+
+class CustomizedEmbedding(nn.Module):
+    def __init__(self, concept_num, concept_in_dim, concept_out_dim, use_contextualized,
+                 pretrained_concept_emb=None, freeze_ent_emb=True, scale=1.0, init_range=0.02):
+        super().__init__()
+        self.scale = scale
+        self.use_contextualized = use_contextualized
+        if not use_contextualized:
+            self.emb = nn.Embedding(concept_num, concept_in_dim)
+            if pretrained_concept_emb is not None:
+                self.emb.weight.data.copy_(pretrained_concept_emb)
+            else:
+                self.emb.weight.data.normal_(mean=0.0, std=init_range)
+            if freeze_ent_emb:
+                freeze_net(self.emb)
+
+        if concept_in_dim != concept_out_dim:
+            self.cpt_transform = nn.Linear(concept_in_dim, concept_out_dim)
+            self.activation = GELU()
+
+    def forward(self, index, contextualized_emb=None):
+        """
+        index: size (bz, a)
+        contextualized_emb: size (bz, b, emb_size) (optional)
+        """
+        if contextualized_emb is not None:
+            assert index.size(0) == contextualized_emb.size(0)
+            if hasattr(self, 'cpt_transform'):
+                contextualized_emb = self.activation(self.cpt_transform(contextualized_emb * self.scale))
+            else:
+                contextualized_emb = contextualized_emb * self.scale
+            emb_dim = contextualized_emb.size(-1)
+            return contextualized_emb.gather(1, index.unsqueeze(-1).expand(-1, -1, emb_dim))
+        else:
+            if hasattr(self, 'cpt_transform'):
+                return self.activation(self.cpt_transform(self.emb(index) * self.scale))
+            else:
+                return self.emb(index) * self.scale
 
 
 def run_test():

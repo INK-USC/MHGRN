@@ -1,16 +1,15 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-import numpy as np
+
 from modeling.modeling_encoder import TextEncoder, MODEL_NAME_TO_CLASS
 from utils.data_utils import BatchGenerator, load_input_tensors
 
 
 class LMForMultipleChoice(nn.Module):
 
-    def __init__(self, model_name, dropout=0.1, encoder_config={}):
+    def __init__(self, model_name, dropout=0.1, from_checkpoint=None, encoder_config={}):
         super().__init__()
-        self.encoder = TextEncoder(model_name, **encoder_config)
+        self.encoder = TextEncoder(model_name, from_checkpoint=from_checkpoint, **encoder_config)
         self.dropout = nn.Dropout(dropout)
         self.decoder = nn.Linear(self.encoder.sent_dim, 1)
 
@@ -27,7 +26,7 @@ class LMDataLoader(object):
 
     def __init__(self, train_statement_path, dev_statement_path, test_statement_path,
                  batch_size, eval_batch_size, device, model_name, max_seq_length=128,
-                 is_inhouse=False, inhouse_train_qids_path=None):
+                 is_inhouse=False, inhouse_train_qids_path=None, subsample=1.0):
         super().__init__()
         self.batch_size = batch_size
         self.eval_batch_size = eval_batch_size
@@ -48,6 +47,19 @@ class LMDataLoader(object):
                 inhouse_qids = set(line.strip() for line in fin)
             self.inhouse_train_indexes = torch.tensor([i for i, qid in enumerate(self.train_qids) if qid in inhouse_qids])
             self.inhouse_test_indexes = torch.tensor([i for i, qid in enumerate(self.train_qids) if qid not in inhouse_qids])
+
+        assert 0. < subsample <= 1.
+        if subsample < 1.:
+            n_train = int(self.train_size() * subsample)
+            assert n_train > 0
+            if self.is_inhouse:
+                self.inhouse_train_indexes = self.inhouse_train_indexes[:n_train]
+            else:
+                self.train_qids = self.train_qids[:n_train]
+                self.train_labels = self.train_labels[:n_train]
+                self.train_data = [x[:n_train] for x in self.train_data]
+                assert all(len(self.train_qids) == x.size(0) for x in [self.train_labels] + self.train_data)
+            assert self.train_size() == n_train
 
     def train_size(self):
         return self.inhouse_train_indexes.size(0) if self.is_inhouse else len(self.train_qids)

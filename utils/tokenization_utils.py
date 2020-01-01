@@ -14,7 +14,7 @@ EXTRA_TOKS = [EOS_TOK, UNK_TOK, PAD_TOK, SEP_TOK]
 
 class WordTokenizer(PreTrainedTokenizer):
     vocab_files_names = {'vocab_file': 'vocab.txt'}
-    pretrained_vocab_files_map = {'vocab_file': {'lstm':'./data/glove/glove.vocab'}}
+    pretrained_vocab_files_map = {'vocab_file': {'lstm': './data/glove/glove.vocab'}}
     max_model_input_sizes = {'lstm': None}
     """
     vocab_file: Path to a json file that contains token-to-id mapping

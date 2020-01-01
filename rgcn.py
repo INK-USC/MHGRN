@@ -1,15 +1,13 @@
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import numpy as np
-from multiprocessing import Pool, cpu_count
-from transformers import (AdamW, ConstantLRSchedule, WarmupLinearSchedule, WarmupConstantSchedule)
 import random
-import argparse
+
+from transformers import (ConstantLRSchedule, WarmupLinearSchedule, WarmupConstantSchedule)
+
 from modeling.modeling_rgcn import *
-from utils.relpath_utils import *
-from utils.parser_utils import *
 from utils.optimization_utils import OPTIMIZER_CLASSES
+from utils.parser_utils import *
+from utils.relpath_utils import *
+
+DECODER_DEFAULT_LR = {'csqa': 1e-3, 'obqa': 1e-3}
 
 
 def evaluate_accuracy(eval_set, model):
@@ -37,25 +35,28 @@ def main():
     parser.add_argument('--test_adj', default=f'./data/{args.dataset}/graph/test.graph.adj.pk')
 
     # model architecture
-    parser.add_argument('--ablation', default=None, choices=['no_node_type_emb'], help='run ablation test')
+    parser.add_argument('--ablation', default=[], choices=['no_node_type_emb', 'no_lm'], help='run ablation test')
     parser.add_argument('--diag_decompose', default=False, type=bool_flag, nargs='?', const=True, help='use diagonal decomposition')
     parser.add_argument('--num_basis', default=8, type=int, help='number of basis (0 to disable basis decomposition)')
     parser.add_argument('--freeze_ent_emb', default=True, type=bool_flag, nargs='?', const=True, help='freeze entity embedding layer')
     parser.add_argument('--att_head_num', default=2, type=int, help='number of attention heads')
-    parser.add_argument('--gnn_layer_num', default=1, type=int, help='number of GNN layers')
+    parser.add_argument('--gnn_layer_num', default=2, type=int, help='number of GNN layers')
     parser.add_argument('--fc_dim', default=200, type=int, help='hidden dim of the fully-connected layers')
-    parser.add_argument('--fc_layer_num', default=1, type=int, help='number of the fully-connected layers')
+    parser.add_argument('--fc_layer_num', default=0, type=int, help='number of the fully-connected layers')
     parser.add_argument('--max_node_num', default=200, type=int)
     parser.add_argument('--dropoutg', type=float, default=0.1, help='dropout for GNN layers')
     parser.add_argument('--dropoutf', type=float, default=0.3, help='dropout for fully-connected layers')
+    parser.add_argument('--cpt_out_dim', type=int, default=100, help='num of dimension for concepts in processing')
 
     # optimization
-    parser.add_argument('-dlr', '--decoder_lr', default=3e-4, type=float, help='learning rate')
-    parser.add_argument('-mbs', '--mini_batch_size', default=4, type=int)
+    parser.add_argument('-dlr', '--decoder_lr', default=DECODER_DEFAULT_LR[args.dataset], type=float, help='learning rate')
+    parser.add_argument('-mbs', '--mini_batch_size', default=1, type=int)
     parser.add_argument('-ebs', '--eval_batch_size', default=4, type=int)
-    parser.add_argument('--unfreeze_epoch', default=3, type=int)
-    parser.add_argument('--refreeze_epoch', default=7, type=int)
+    parser.add_argument('--unfreeze_epoch', default=0, type=int)
+    parser.add_argument('--refreeze_epoch', default=10000, type=int)
 
+    parser.add_argument('-h', '--help', action='help', default=argparse.SUPPRESS, help='show this help message and exit')
+    parser.add_argument('--save', type=bool_flag, default=False, help='whether to save logs and models')
     args = parser.parse_args()
 
     if args.mode == 'train':
@@ -69,7 +70,9 @@ def main():
 
 
 def train(args):
-    print(args)
+    print('configuration:')
+    print('\n'.join('\t{:15} {}'.format(k + ':', str(v)) for k, v in sorted(dict(vars(args)).items())))
+    print()
 
     random.seed(args.seed)
     np.random.seed(args.seed)
@@ -80,10 +83,11 @@ def train(args):
     config_path = os.path.join(args.save_dir, 'config.json')
     model_path = os.path.join(args.save_dir, 'model.pt')
     log_path = os.path.join(args.save_dir, 'log.csv')
-    export_config(args, config_path)
-    check_path(model_path)
-    with open(log_path, 'w') as fout:
-        fout.write('step,train_acc,dev_acc\n')
+    if args.save:
+        export_config(args, config_path)
+        check_path(model_path)
+        with open(log_path, 'w') as fout:
+            fout.write('step,train_acc,dev_acc\n')
 
     ###################################################################################################
     #   Load data                                                                                     #
@@ -110,9 +114,9 @@ def train(args):
 
         lstm_config = get_lstm_config_from_args(args)
         model = LMRGCN(args.encoder, num_concepts=concept_num, num_relations=args.num_relation, num_basis=args.num_basis,
-                       concept_dim=concept_dim, num_gnn_layers=args.gnn_layer_num,
+                       concept_dim=args.cpt_out_dim, concept_in_dim=concept_dim, num_gnn_layers=args.gnn_layer_num,
                        num_attention_heads=args.att_head_num, fc_dim=args.fc_dim, num_fc_layers=args.fc_layer_num,
-                       p_gnn=args.dropoutg, p_fc=args.dropoutf,
+                       p_gnn=args.dropoutg, p_fc=args.dropoutf, freeze_ent_emb=args.freeze_ent_emb,
                        pretrained_concept_emb=cp_emb, diag_decompose=args.diag_decompose, ablation=args.ablation, encoder_config=lstm_config)
         if args.freeze_ent_emb:
             freeze_net(model.decoder.concept_emb)
@@ -212,14 +216,16 @@ def train(args):
             print('-' * 71)
             print('| step {:5} | dev_acc {:7.4f} | test_acc {:7.4f} |'.format(global_step, dev_acc, test_acc))
             print('-' * 71)
-            with open(log_path, 'a') as fout:
-                fout.write('{},{},{}\n'.format(global_step, dev_acc, test_acc))
+            if args.save:
+                with open(log_path, 'a') as fout:
+                    fout.write('{},{},{}\n'.format(global_step, dev_acc, test_acc))
             if dev_acc >= best_dev_acc:
                 best_dev_acc = dev_acc
                 final_test_acc = test_acc
                 best_dev_epoch = epoch_id
-                torch.save([model, args], model_path)
-                print(f'model saved to {model_path}')
+                if args.save:
+                    torch.save([model, args], model_path)
+                    print(f'model saved to {model_path}')
             model.train()
             start_time = time.time()
             if epoch_id > args.unfreeze_epoch and epoch_id - best_dev_epoch >= args.max_epochs_before_stop:

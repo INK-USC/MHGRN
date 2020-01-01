@@ -1,15 +1,14 @@
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import numpy as np
 import random
-import argparse
+
+import numpy as np
+import torch.nn.functional as F
 from tqdm import tqdm
-from transformers import AdamW, WarmupLinearSchedule, WarmupConstantSchedule, ConstantLRSchedule
+from transformers import WarmupLinearSchedule, WarmupConstantSchedule, ConstantLRSchedule
+
 from modeling.modeling_lm import *
+from utils.optimization_utils import OPTIMIZER_CLASSES
 from utils.parser_utils import *
 from utils.utils import *
-from utils.optimization_utils import OPTIMIZER_CLASSES
 
 
 def evaluate_accuracy(eval_set, model):
@@ -28,6 +27,8 @@ def main():
     args, _ = parser.parse_known_args()
     parser.add_argument('--mode', default='train', choices=['train', 'extract', 'eval', 'pred'], help='run training or evaluation')
     parser.add_argument('--save_dir', default=f'./saved_models/{args.dataset}.{args.encoder}.lm/', help='model output directory')
+    parser.add_argument('-ckpt', '--from_checkpoint', default=None, help='load from a checkpoint')
+    parser.add_argument('--subsample', default=1.0, type=float)
 
     # optimization
     parser.add_argument('-ebs', "--eval_batch_size", default=8, type=int, help="Total batch size for eval.")
@@ -40,6 +41,7 @@ def main():
     parser.add_argument('--dev_output', default=f'./data/{args.dataset}/bert/{args.dataset}.dev.{args.encoder}.layer{args.layer_id}.npy')
     parser.add_argument('--test_output', default=f'./data/{args.dataset}/bert/{args.dataset}.test.{args.encoder}.layer{args.layer_id}.npy')
 
+    parser.add_argument('-h', '--help', action='help', default=argparse.SUPPRESS, help='show this help message and exit')
     args = parser.parse_args()
 
     if args.mode == 'train':
@@ -73,14 +75,14 @@ def train(args):
                            batch_size=args.batch_size, eval_batch_size=args.eval_batch_size, device=device,
                            model_name=args.encoder,
                            max_seq_length=args.max_seq_len,
-                           is_inhouse=args.inhouse, inhouse_train_qids_path=args.inhouse_train_qids)
+                           is_inhouse=args.inhouse, inhouse_train_qids_path=args.inhouse_train_qids, subsample=args.subsample)
 
     ###################################################################################################
     #   Build model                                                                                   #
     ###################################################################################################
 
     lstm_config = get_lstm_config_from_args(args)
-    model = LMForMultipleChoice(args.encoder, encoder_config=lstm_config)
+    model = LMForMultipleChoice(args.encoder, from_checkpoint=args.from_checkpoint, encoder_config=lstm_config)
 
     try:
         model.to(device)
@@ -162,7 +164,7 @@ def train(args):
                 final_test_acc = test_acc
                 best_dev_acc = dev_acc
                 best_dev_epoch = epoch
-                torch.save([args, model], model_path)
+                torch.save([model, args], model_path)
             print('| epoch {:5} | dev_acc {:7.4f} | test_acc {:7.4f} |'.format(epoch, dev_acc, test_acc))
             if epoch - best_dev_epoch >= args.max_epochs_before_stop:
                 break
@@ -179,7 +181,7 @@ def train(args):
 
 def extract(args):  # Note: extract mode ALWAYS use the official split
     model_path = os.path.join(args.save_dir, 'model.pt')
-    old_args, model = torch.load(model_path)
+    model, old_args = torch.load(model_path)
     for split in ('train', 'dev') if old_args.test_statements is None else ('train', 'dev', 'test'):
         setattr(args, f'{split}_output', getattr(args, f'{split}_output').format(dataset=old_args.dataset,
                                                                                  setting=('inhouse' if old_args.inhouse else 'official'),
@@ -214,7 +216,7 @@ def extract(args):  # Note: extract mode ALWAYS use the official split
 
 def eval(args):
     model_path = os.path.join(args.save_dir, 'model.pt')
-    old_args, model = torch.load(model_path)
+    model, old_args = torch.load(model_path)
     device = torch.device("cuda:0" if torch.cuda.is_available() and args.cuda else "cpu")
     model.to(device)
     model.eval()

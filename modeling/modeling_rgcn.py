@@ -1,19 +1,6 @@
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.utils.data as data
-import networkx as nx
-from tqdm import tqdm
-import numpy as np
-import argparse
-import pickle
-import random
-import time
 from modeling.modeling_encoder import TextEncoder, MODEL_NAME_TO_CLASS
-from utils.layers import *
-from utils.utils import *
-from utils.tokenization_utils import *
 from utils.data_utils import *
+from utils.layers import *
 
 
 class RGCNLayer(nn.Module):
@@ -99,16 +86,14 @@ class RGCN(nn.Module):
 
 class RGCNNet(nn.Module):
 
-    def __init__(self, num_concepts, num_relations, num_basis, sent_dim, concept_dim,
+    def __init__(self, num_concepts, num_relations, num_basis, sent_dim, concept_dim, concept_in_dim, freeze_ent_emb,
                  num_gnn_layers, num_attention_heads, fc_dim, num_fc_layers, p_gnn, p_fc,
                  pretrained_concept_emb=None, diag_decompose=False, ablation=None):
         super().__init__()
         self.ablation = ablation
 
-        self.concept_emb = nn.Embedding(num_concepts, concept_dim)
-        if pretrained_concept_emb is not None:
-            self.concept_emb.weight.data.copy_(pretrained_concept_emb)
-
+        self.concept_emb = CustomizedEmbedding(concept_num=num_concepts, concept_out_dim=concept_dim, concept_in_dim=concept_in_dim,
+                                               pretrained_concept_emb=pretrained_concept_emb, freeze_ent_emb=freeze_ent_emb, use_contextualized=False)
         gnn_dim = concept_dim
         self.rgcn = RGCN(gnn_dim, num_relations, num_basis, num_gnn_layers, p_gnn, diag_decompose)
         self.pool_layer = MultiheadAttPoolLayer(num_attention_heads, sent_dim, gnn_dim)
@@ -138,13 +123,14 @@ class RGCNNet(nn.Module):
 
 
 class LMRGCN(nn.Module):
-    def __init__(self, model_name, num_concepts, num_relations, num_basis, concept_dim,
+    def __init__(self, model_name, num_concepts, num_relations, num_basis, concept_dim, concept_in_dim, freeze_ent_emb,
                  num_gnn_layers, num_attention_heads, fc_dim, num_fc_layers, p_gnn, p_fc,
                  pretrained_concept_emb=None, diag_decompose=False, ablation=None, encoder_config={}):
         super().__init__()
+        self.ablation = ablation
         self.model_name = model_name
         self.encoder = TextEncoder(model_name, **encoder_config)
-        self.decoder = RGCNNet(num_concepts, num_relations, num_basis, self.encoder.sent_dim, concept_dim,
+        self.decoder = RGCNNet(num_concepts, num_relations, num_basis, self.encoder.sent_dim, concept_dim, concept_in_dim, freeze_ent_emb,
                                num_gnn_layers, num_attention_heads, fc_dim, num_fc_layers, p_gnn, p_fc,
                                pretrained_concept_emb=pretrained_concept_emb, diag_decompose=diag_decompose, ablation=ablation)
 
@@ -162,7 +148,10 @@ class LMRGCN(nn.Module):
         inputs = [x.view(x.size(0) * x.size(1), *x.size()[2:]) for x in inputs]  # merge the batch dimension and the num_choice dimension
 
         *lm_inputs, concept_ids, node_type_ids, adj_lengths, adj = inputs
-        sent_vecs, _ = self.encoder(*lm_inputs, layer_id=layer_id)
+        if 'no_lm' not in self.ablation:
+            sent_vecs, _ = self.encoder(*lm_inputs, layer_id=layer_id)
+        else:
+            sent_vecs = torch.ones((bs * nc, self.encoder.sent_dim), dtype=torch.float).to(concept_ids.device)
         logits, attn = self.decoder(sent_vecs=sent_vecs, concepts=concept_ids, adj=adj, adj_lengths=adj_lengths)
         logits = logits.view(bs, nc)
         return logits, attn

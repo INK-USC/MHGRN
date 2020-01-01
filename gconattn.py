@@ -10,6 +10,7 @@ from utils.datasets import *
 from utils.optimization_utils import OPTIMIZER_CLASSES
 from tqdm import tqdm
 
+DECODER_DEFAULT_LR = {'csqa': 3e-4, 'obqa': 1e-4}
 
 def evaluate_accuracy(eval_set, model):
     n_samples, n_correct = 0, 0
@@ -46,14 +47,18 @@ def main():
     parser.add_argument('--freeze_ent_emb', default=True, type=bool_flag, nargs='?', const=True, help='freeze entity embedding layer')
     parser.add_argument('--init_range', default=0.02, type=float, help='stddev when initializing with normal distribution')
     parser.add_argument('--dropoutm', type=float, default=0.1, help='dropout for mlp hidden units (0 = no dropout')
+    parser.add_argument('--cpt_out_dim', type=int, default=300, help='num of dimension for concepts in processing')
+    parser.add_argument('--subsample', default=1.0, type=float)
 
     # optimization
-    parser.add_argument('-dlr', '--decoder_lr', default=3e-4, type=float, help='learning rate')
-    parser.add_argument('-mbs', '--mini_batch_size', default=2, type=int)
-    parser.add_argument('-ebs', '--eval_batch_size', default=8, type=int)
-    parser.add_argument('--unfreeze_epoch', default=(3 if args.encoder not in ('lstm',) else 0), type=int)
-    parser.add_argument('--refreeze_epoch', default=(5 if args.encoder not in ('lstm',) else 1e9), type=int)
+    parser.add_argument('-dlr', '--decoder_lr', default=DECODER_DEFAULT_LR[args.dataset], type=float, help='learning rate')
+    parser.add_argument('-mbs', '--mini_batch_size', default=1, type=int)
+    parser.add_argument('-ebs', '--eval_batch_size', default=4, type=int)
+    parser.add_argument('--unfreeze_epoch', default=0, type=int)
+    parser.add_argument('--refreeze_epoch', default=10000, type=int)
 
+    parser.add_argument('-h', '--help', action='help', default=argparse.SUPPRESS, help='show this help message and exit')
+    parser.add_argument('--save', type=bool_flag, default=False, help='whether to save logs and models')
     args = parser.parse_args()
 
     if args.mode == 'train':
@@ -80,17 +85,18 @@ def train(args):
     config_path = os.path.join(args.save_dir, 'config.json')
     model_path = os.path.join(args.save_dir, 'model.pt')
     log_path = os.path.join(args.save_dir, 'log.csv')
-    export_config(args, config_path)
-    check_path(model_path)
-    with open(log_path, 'w') as fout:
-        fout.write('step,train_acc,dev_acc\n')
+    if args.save:
+        export_config(args, config_path)
+        check_path(model_path)
+        with open(log_path, 'w') as fout:
+            fout.write('step,train_acc,dev_acc\n')
 
     ###################################################################################################
     #   Load data                                                                                     #
     ###################################################################################################
 
-    cp_emb = np.concatenate([np.load(path) for path in args.ent_emb_paths], axis=1)
-    cp_emb = torch.tensor(cp_emb)
+    cp_emb = [np.load(path) for path in args.ent_emb_paths]
+    cp_emb = torch.tensor(np.concatenate(cp_emb, 1))
 
     concept_num, concept_dim = cp_emb.size(0), cp_emb.size(1)
     print('num_concepts: {}, concept_dim: {}'.format(concept_num, concept_dim))
@@ -102,7 +108,8 @@ def train(args):
                                  test_statement_path=args.test_statements, test_concept_jsonl=args.test_concepts,
                                  concept2id_path=args.cpnet_vocab_path, batch_size=args.batch_size, eval_batch_size=args.eval_batch_size,
                                  device=device, model_name=args.encoder, max_cpt_num=max_cpt_num[args.dataset],
-                                 max_seq_length=args.max_seq_len, is_inhouse=args.inhouse, inhouse_train_qids_path=args.inhouse_train_qids)
+                                 max_seq_length=args.max_seq_len, is_inhouse=args.inhouse, inhouse_train_qids_path=args.inhouse_train_qids,
+                                 subsample=args.subsample)
 
     print('len(train_set): {}   len(dev_set): {}   len(test_set): {}'.format(dataset.train_size(), dataset.dev_size(), dataset.test_size()))
     print()
@@ -112,7 +119,8 @@ def train(args):
     ###################################################################################################
 
     lstm_config = get_lstm_config_from_args(args)
-    model = LMGconAttn(model_name=args.encoder, concept_num=concept_num, concept_dim=concept_dim,
+    model = LMGconAttn(model_name=args.encoder, concept_num=concept_num,
+                       concept_dim=args.cpt_out_dim, concept_in_dim=concept_dim, freeze_ent_emb=args.freeze_ent_emb,
                        pretrained_concept_emb=cp_emb, hidden_dim=args.decoder_hidden_dim, dropout=args.dropoutm, encoder_config=lstm_config)
 
     if args.freeze_ent_emb:
@@ -214,14 +222,16 @@ def train(args):
             print('-' * 71)
             print('| step {:5} | dev_acc {:7.4f} | test_acc {:7.4f} |'.format(global_step, dev_acc, test_acc))
             print('-' * 71)
-            with open(log_path, 'a') as fout:
-                fout.write('{},{},{}\n'.format(global_step, dev_acc, test_acc))
+            if args.save:
+                with open(log_path, 'a') as fout:
+                    fout.write('{},{},{}\n'.format(global_step, dev_acc, test_acc))
             if dev_acc >= best_dev_acc:
                 best_dev_acc = dev_acc
                 final_test_acc = test_acc
                 best_dev_epoch = epoch_id
-                torch.save([model, args], model_path)
-                print(f'model saved to {model_path}')
+                if args.save:
+                    torch.save([model, args], model_path)
+                    print(f'model saved to {model_path}')
             model.train()
             start_time = time.time()
             if epoch_id > args.unfreeze_epoch and epoch_id - best_dev_epoch >= args.max_epochs_before_stop:
