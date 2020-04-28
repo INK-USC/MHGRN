@@ -1,13 +1,13 @@
-# LM-GNN-QA
+# Multi-Hop Graph Relation Networksfor Knowledge-Aware Question Answering (Feng et al., 2020)
 
-This repository implements graph encoding models for question answering (including vanilla LM finetuning):
+Code for the [paper](). This repository also implements other graph encoding models for question answering (including vanilla LM finetuning).
 
 - **RelationNet**
 - **R-GCN**
 - **KagNet** 
 - **GConAttn**
 - **KVMem**
-- **MultiGRN**
+- **MHGRN(MultiGRN)**
 
 Each model supports the following text encoders:
 
@@ -202,11 +202,4 @@ python {lm,rn,rgcn,...}.py --mode eval [ --save_dir path/to/directory/ ]
 - Modify `preprocess.py` and perform subgraph extraction for your data
 - Modify `utils/parser_utils.py` to support your own dataset
 - Tune `encoder_lr`,`decoder_lr` and other important hyperparameters, modify `utils/parser_utils.py` and `{model}.py` to record the tuned hyperparameters
-
-
-
-## TODO
-
-- [ ] Fix KagNet
-- [ ] Implement sparse versions of R-GCN and MultiGRN using dgl
 
