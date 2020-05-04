@@ -80,7 +80,7 @@ python -m spacy download en
 First, you need to download all the necessary data in order to train the model:
 
 ```bash
-git clone https://github.com/shanzhenren/LM-GNN-QA.git
+git clone https://github.com/INK-USC/MHGRN.git
 cd LM-GNN-QA
 bash scripts/download.sh
 ```
