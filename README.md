@@ -5,6 +5,7 @@ This is the repo of our preprint [paper](https://yuchenlin.xyz/paper/mhgrn_arixv
 Scalable Multi-Hop Relational Reasoning for Knowledge-Aware Question Answering
 Yanlin Feng*, Xinyue Chen*, Bill Yuchen Lin, Peifeng Wang, Jun Yan and Xiang Ren
 arixv cs.CL 
+*=equal contritbution
 ```
 This repository also implements other graph encoding models for question answering (including vanilla LM finetuning).
 
