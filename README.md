@@ -155,10 +155,10 @@ Each graph encoding model is implemented in a single script:
 | None                                                         | lm.py       | w/o knowledge graph                                          |
 | [Relation Network](<https://papers.nips.cc/paper/7082-a-simple-neural-network-module-for-relational-reasoning.pdf>) | rn.py       |                                                              |
 | [R-GCN](<https://arxiv.org/pdf/1703.06103.pdf>)              | rgcn.py     | Use `--gnn_layer_num ` and `--num_basis` to specify #layer and #basis |
-| KagNet                                                       | kagnet.py   | Adapted from <https://github.com/INK-USC/KagNet>, still tuning      |
+| [KagNet](https://arxiv.org/abs/1909.02151)                                                       | kagnet.py   | Adapted from <https://github.com/INK-USC/KagNet>, still tuning      |
 | Gcon-Attn                                                    | gconattn.py |                                                              |
 | KV-Memory                                                    | kvmem.py    |                                                              |
-| MultiGRN                                                     | grn.py      |                                                              |
+| MHGRN                                                     | grn.py      |                                                              |
 
 Some important command line arguments are listed as follows (run `python {lm,rn,rgcn,...}.py -h` for a complete list):
 
