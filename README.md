@@ -1,6 +1,6 @@
 # Multi-Hop Graph Relation Networks
 
-This is the repo of our preprint paper:
+This is the repo of our preprint [paper](https://yuchenlin.xyz/paper/mhgrn_arixv.pdf):
 ```
 Scalable Multi-Hop Relational Reasoning for Knowledge-Aware Question Answering
 Yanlin Feng*, Xinyue Chen*, Bill Yuchen Lin, Peifeng Wang, Jun Yan and Xiang Ren
