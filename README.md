@@ -1,13 +1,19 @@
-# Multi-Hop Graph Relation Networksfor Knowledge-Aware Question Answering (Feng et al., 2020)
+# Multi-Hop Graph Relation Networks
 
-Code for the [paper](). This repository also implements other graph encoding models for question answering (including vanilla LM finetuning).
+This is the repo of our preprint paper:
+```
+Scalable Multi-Hop Relational Reasoning for Knowledge-Aware Question Answering
+Yanlin Feng*, Xinyue Chen*, Bill Yuchen Lin, Peifeng Wang, Jun Yan and Xiang Ren
+arixv cs.CL 
+```
+This repository also implements other graph encoding models for question answering (including vanilla LM finetuning).
 
 - **RelationNet**
 - **R-GCN**
 - **KagNet** 
 - **GConAttn**
 - **KVMem**
-- **MHGRN(MultiGRN)**
+- **MHGRN (or. MultiGRN)**
 
 Each model supports the following text encoders:
 
