@@ -3,10 +3,9 @@ import random
 import numpy as np
 import torch.nn.functional as F
 from tqdm import tqdm
-from transformers import WarmupLinearSchedule, WarmupConstantSchedule, ConstantLRSchedule
 
 from modeling.modeling_lm import *
-from utils.optimization_utils import OPTIMIZER_CLASSES
+from utils.optimization_utils import *
 from utils.parser_utils import *
 from utils.utils import *
 
@@ -75,7 +74,8 @@ def train(args):
                            batch_size=args.batch_size, eval_batch_size=args.eval_batch_size, device=device,
                            model_name=args.encoder,
                            max_seq_length=args.max_seq_len,
-                           is_inhouse=args.inhouse, inhouse_train_qids_path=args.inhouse_train_qids, subsample=args.subsample)
+                           is_inhouse=args.inhouse, inhouse_train_qids_path=args.inhouse_train_qids, subsample=args.subsample,
+                           format=args.format)
 
     ###################################################################################################
     #   Build model                                                                                   #
@@ -240,7 +240,7 @@ def pred(args):  # Note: pred mode ALWAYS uses the official split
     dev_pred_path = os.path.join(args.save_dir, 'predictions_dev.csv')
     test_pred_path = os.path.join(args.save_dir, 'predictions_test.csv')
     model_path = os.path.join(args.save_dir, 'model.pt')
-    old_args, model = torch.load(model_path)
+    model, old_args = torch.load(model_path)
     device = torch.device("cuda:0" if torch.cuda.is_available() and args.cuda else "cpu")
     model.to(device)
     model.eval()

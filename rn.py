@@ -1,10 +1,8 @@
 import random
 from multiprocessing import cpu_count
 
-from transformers import (ConstantLRSchedule, WarmupLinearSchedule, WarmupConstantSchedule)
-
 from modeling.modeling_rn import *
-from utils.optimization_utils import OPTIMIZER_CLASSES
+from utils.optimization_utils import *
 from utils.parser_utils import *
 from utils.relpath_utils import *
 
@@ -158,7 +156,8 @@ def train(args):
                                       use_contextualized=use_contextualized,
                                       train_adj_path=args.train_adj, dev_adj_path=args.dev_adj, test_adj_path=args.test_adj,
                                       train_node_features_path=args.train_node_features, dev_node_features_path=args.dev_node_features,
-                                      test_node_features_path=args.test_node_features, node_feature_type=args.node_feature_type)
+                                      test_node_features_path=args.test_node_features, node_feature_type=args.node_feature_type,
+                                      format=args.format)
 
     ###################################################################################################
     #   Build model                                                                                   #

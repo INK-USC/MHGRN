@@ -1,16 +1,13 @@
-import torch
-import numpy as np
 import random
-import argparse
-from transformers import (AdamW, ConstantLRSchedule, WarmupConstantSchedule, WarmupLinearSchedule)
+
 from modeling.modeling_gconattn import *
+from utils.datasets import *
+from utils.optimization_utils import *
 from utils.parser_utils import *
 from utils.utils import *
-from utils.datasets import *
-from utils.optimization_utils import OPTIMIZER_CLASSES
-from tqdm import tqdm
 
 DECODER_DEFAULT_LR = {'csqa': 3e-4, 'obqa': 1e-4}
+
 
 def evaluate_accuracy(eval_set, model):
     n_samples, n_correct = 0, 0
@@ -109,7 +106,7 @@ def train(args):
                                  concept2id_path=args.cpnet_vocab_path, batch_size=args.batch_size, eval_batch_size=args.eval_batch_size,
                                  device=device, model_name=args.encoder, max_cpt_num=max_cpt_num[args.dataset],
                                  max_seq_length=args.max_seq_len, is_inhouse=args.inhouse, inhouse_train_qids_path=args.inhouse_train_qids,
-                                 subsample=args.subsample)
+                                 subsample=args.subsample, format=args.format)
 
     print('len(train_set): {}   len(dev_set): {}   len(test_set): {}'.format(dataset.train_size(), dataset.dev_size(), dataset.test_size()))
     print()

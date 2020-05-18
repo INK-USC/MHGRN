@@ -151,7 +151,7 @@ class LMRelationNetDataLoader(object):
                  max_tuple_num=200, max_seq_length=128,
                  is_inhouse=True, inhouse_train_qids_path=None, use_contextualized=False,
                  train_adj_path=None, train_node_features_path=None, dev_adj_path=None, dev_node_features_path=None,
-                 test_adj_path=None, test_node_features_path=None, node_feature_type=None):
+                 test_adj_path=None, test_node_features_path=None, node_feature_type=None, format=[]):
         super().__init__()
         self.batch_size = batch_size
         self.eval_batch_size = eval_batch_size
@@ -160,8 +160,8 @@ class LMRelationNetDataLoader(object):
         self.use_contextualized = use_contextualized
 
         model_type = MODEL_NAME_TO_CLASS[model_name]
-        self.train_qids, self.train_labels, *self.train_data = load_input_tensors(train_statement_path, model_type, model_name, max_seq_length)
-        self.dev_qids, self.dev_labels, *self.dev_data = load_input_tensors(dev_statement_path, model_type, model_name, max_seq_length)
+        self.train_qids, self.train_labels, *self.train_data = load_input_tensors(train_statement_path, model_type, model_name, max_seq_length, format=format)
+        self.dev_qids, self.dev_labels, *self.dev_data = load_input_tensors(dev_statement_path, model_type, model_name, max_seq_length, format=format)
 
         num_choice = self.train_data[0].size(1)
         self.train_data += load_2hop_relational_paths(train_rpath_jsonl, train_adj_path,
@@ -173,7 +173,7 @@ class LMRelationNetDataLoader(object):
         assert all(len(self.train_qids) == x.size(0) for x in [self.train_labels] + self.train_data)
         assert all(len(self.dev_qids) == x.size(0) for x in [self.dev_labels] + self.dev_data)
         if test_statement_path is not None:
-            self.test_qids, self.test_labels, *self.test_data = load_input_tensors(test_statement_path, model_type, model_name, max_seq_length)
+            self.test_qids, self.test_labels, *self.test_data = load_input_tensors(test_statement_path, model_type, model_name, max_seq_length, format=format)
             self.test_data += load_2hop_relational_paths(test_rpath_jsonl, test_adj_path,
                                                          emb_pk_path=test_node_features_path if use_contextualized else None,
                                                          max_tuple_num=max_tuple_num, num_choice=num_choice, node_feature_type=node_feature_type)

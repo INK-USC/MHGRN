@@ -559,10 +559,7 @@ class GraphRelationNet(nn.Module):
 
     def _init_identity(self, module):
         if module.diag_decompose:
-            if 'fix_scale' in self.ablation:
-                module.w_vs.data[:, :, -1] = self.init_range * np.sqrt(2 / np.pi)
-            else:
-                module.w_vs.data[:, :, -1] = 1
+            module.w_vs.data[:, :, -1] = 1
         elif module.n_basis == 0:
             module.w_vs.data[:, -1, :, :] = torch.eye(module.w_vs.size(-1), device=module.w_vs.device)
         else:
@@ -578,7 +575,10 @@ class GraphRelationNet(nn.Module):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, MultiHopMessagePassingLayer):
-            module.w_vs.data.normal_(mean=0.0, std=self.init_range)
+            if 'fix_scale' in self.ablation:
+                module.w_vs.data.normal_(mean=0.0, std=np.sqrt(np.pi / 2))
+            else:
+                module.w_vs.data.normal_(mean=0.0, std=self.init_range)
             if hasattr(module, 'w_vs_co'):
                 getattr(module, 'w_vs_co').data.fill_(1.0)
             if self.do_init_identity:
@@ -599,7 +599,7 @@ class GraphRelationNet(nn.Module):
         path_ids[:, ::2] = self.concept_ids.gather(1, entity_ids)
         return path_ids, path_lengths
 
-    def forward(self, sent_vecs, concept_ids, node_type_ids, adj_lengths, adj, emb_data=None, cache_output=False):
+    def forward(self, sent_vecs, concept_ids, node_type_ids, adj_lengths, adj, emb_data=None, cache_output=False, disable_lm=False):
         """
         sent_vecs: (batch_size, d_sent)
         concept_ids: (batch_size, n_node)
@@ -643,7 +643,8 @@ class GraphRelationNet(nn.Module):
             self.concept_ids = concept_ids
             self.adj = adj
             self.pool_attn = pool_attn
-
+        if disable_lm:
+            sent_vecs = torch.zeros((sent_vecs.size(0), sent_vecs.size(0)), dtype=torch.float, device=sent_vecs.device)
         concat = self.dropout_fc(torch.cat((graph_vecs, sent_vecs), 1))
         logits = self.fc(concat)
         return logits, pool_attn
@@ -676,7 +677,7 @@ class LMGraphRelationNet(nn.Module):
         path_lengths = path_lengths.view(bs, nc)
         return logits, path_ids, path_lengths
 
-    def forward(self, *inputs, layer_id=-1, cache_output=False):
+    def forward(self, *inputs, layer_id=-1, cache_output=False, disable_lm=False):
         """
         sent_vecs: (batch_size, num_choice, d_sent)
         concept_ids: (batch_size, num_choice, n_node)
@@ -693,12 +694,12 @@ class LMGraphRelationNet(nn.Module):
             emb_data = None
         else:
             *lm_inputs, concept_ids, node_type_ids, adj_lengths, emb_data, adj = inputs
-        if 'no_lm' not in self.ablation:
-            sent_vecs, all_hidden_states = self.encoder(*lm_inputs, layer_id=layer_id)
-        else:
+        if 'no_lm' in self.ablation:
             sent_vecs = torch.ones((bs * nc, self.encoder.sent_dim), dtype=torch.float)
+        else:
+            sent_vecs, all_hidden_states = self.encoder(*lm_inputs, layer_id=layer_id)
         logits, attn = self.decoder(sent_vecs.to(concept_ids.device), concept_ids, node_type_ids, adj_lengths, adj,
-                                    emb_data=emb_data, cache_output=cache_output)
+                                    emb_data=emb_data, cache_output=cache_output, disable_lm=disable_lm)
         logits = logits.view(bs, nc)
         return logits, attn
 
@@ -711,7 +712,7 @@ class LMGraphRelationNetDataLoader(object):
                  batch_size, eval_batch_size, device, model_name, max_node_num=200, max_seq_length=128,
                  train_embs_path=None, dev_embs_path=None, test_embs_path=None,
                  is_inhouse=False, inhouse_train_qids_path=None, use_contextualized=False,
-                 subsample=1.0):
+                 subsample=1.0, format=[]):
         super().__init__()
         self.batch_size = batch_size
         self.eval_batch_size = eval_batch_size
@@ -720,8 +721,8 @@ class LMGraphRelationNetDataLoader(object):
         self.use_contextualized = use_contextualized
 
         model_type = MODEL_NAME_TO_CLASS[model_name]
-        self.train_qids, self.train_labels, *self.train_encoder_data = load_input_tensors(train_statement_path, model_type, model_name, max_seq_length)
-        self.dev_qids, self.dev_labels, *self.dev_encoder_data = load_input_tensors(dev_statement_path, model_type, model_name, max_seq_length)
+        self.train_qids, self.train_labels, *self.train_encoder_data = load_input_tensors(train_statement_path, model_type, model_name, max_seq_length, format=format)
+        self.dev_qids, self.dev_labels, *self.dev_encoder_data = load_input_tensors(dev_statement_path, model_type, model_name, max_seq_length, format=format)
 
         num_choice = self.train_encoder_data[0].size(1)
         *self.train_decoder_data, self.train_adj_data, n_rel = load_adj_data(train_adj_path, max_node_num, num_choice, emb_pk_path=train_embs_path if use_contextualized else None)
@@ -734,7 +735,7 @@ class LMGraphRelationNetDataLoader(object):
         self.eval_adj_empty = torch.zeros((self.eval_batch_size, num_choice, n_rel - 1, max_node_num, max_node_num), dtype=torch.float32)
 
         if test_statement_path is not None:
-            self.test_qids, self.test_labels, *self.test_encoder_data = load_input_tensors(test_statement_path, model_type, model_name, max_seq_length)
+            self.test_qids, self.test_labels, *self.test_encoder_data = load_input_tensors(test_statement_path, model_type, model_name, max_seq_length, format=format)
             *self.test_decoder_data, self.test_adj_data, n_rel = load_adj_data(test_adj_path, max_node_num, num_choice, emb_pk_path=test_embs_path if use_contextualized else None)
             assert all(len(self.test_qids) == len(self.test_adj_data) == x.size(0) for x in [self.test_labels] + self.test_encoder_data + self.test_decoder_data)
 

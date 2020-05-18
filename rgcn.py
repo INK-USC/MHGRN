@@ -1,9 +1,7 @@
 import random
 
-from transformers import (ConstantLRSchedule, WarmupLinearSchedule, WarmupConstantSchedule)
-
 from modeling.modeling_rgcn import *
-from utils.optimization_utils import OPTIMIZER_CLASSES
+from utils.optimization_utils import *
 from utils.parser_utils import *
 from utils.relpath_utils import *
 
@@ -106,7 +104,7 @@ def train(args):
                                    test_statement_path=args.test_statements, test_adj_path=args.test_adj,
                                    batch_size=args.batch_size, eval_batch_size=args.eval_batch_size, device=device,
                                    model_name=args.encoder, max_node_num=args.max_node_num, max_seq_length=args.max_seq_len,
-                                   is_inhouse=args.inhouse, inhouse_train_qids_path=args.inhouse_train_qids)
+                                   is_inhouse=args.inhouse, inhouse_train_qids_path=args.inhouse_train_qids, format=args.format)
 
         ###################################################################################################
         #   Build model                                                                                   #

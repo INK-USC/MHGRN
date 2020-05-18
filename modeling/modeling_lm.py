@@ -26,7 +26,7 @@ class LMDataLoader(object):
 
     def __init__(self, train_statement_path, dev_statement_path, test_statement_path,
                  batch_size, eval_batch_size, device, model_name, max_seq_length=128,
-                 is_inhouse=False, inhouse_train_qids_path=None, subsample=1.0):
+                 is_inhouse=False, inhouse_train_qids_path=None, subsample=1.0, format=[]):
         super().__init__()
         self.batch_size = batch_size
         self.eval_batch_size = eval_batch_size
@@ -34,12 +34,12 @@ class LMDataLoader(object):
         self.is_inhouse = is_inhouse
 
         model_type = MODEL_NAME_TO_CLASS[model_name]
-        self.train_qids, self.train_labels, *self.train_data = load_input_tensors(train_statement_path, model_type, model_name, max_seq_length)
-        self.dev_qids, self.dev_labels, *self.dev_data = load_input_tensors(dev_statement_path, model_type, model_name, max_seq_length)
+        self.train_qids, self.train_labels, *self.train_data = load_input_tensors(train_statement_path, model_type, model_name, max_seq_length, format=format)
+        self.dev_qids, self.dev_labels, *self.dev_data = load_input_tensors(dev_statement_path, model_type, model_name, max_seq_length, format=format)
         assert all(len(self.train_qids) == x.size(0) for x in [self.train_labels] + self.train_data)
         assert all(len(self.dev_qids) == x.size(0) for x in [self.dev_labels] + self.dev_data)
         if test_statement_path is not None:
-            self.test_qids, self.test_labels, *self.test_data = load_input_tensors(test_statement_path, model_type, model_name, max_seq_length)
+            self.test_qids, self.test_labels, *self.test_data = load_input_tensors(test_statement_path, model_type, model_name, max_seq_length, format=format)
             assert all(len(self.test_qids) == x.size(0) for x in [self.test_labels] + self.test_data)
 
         if self.is_inhouse:

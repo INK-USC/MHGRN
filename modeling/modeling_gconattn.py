@@ -1,14 +1,6 @@
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.nn.utils.rnn import pad_sequence
-import numpy as np
 from modeling.modeling_lm import *
-from utils.data_utils import BatchGenerator, load_input_tensors
-from utils.utils import *
-from utils.layers import *
-from utils.tokenization_utils import *
 from utils.data_utils import *
+from utils.layers import *
 
 
 class GconAttn(nn.Module):
@@ -94,7 +86,7 @@ class GconAttnDataLoader(object):
                  dev_concept_jsonl: str, test_statement_path: str, test_concept_jsonl: str,
                  concept2id_path: str, batch_size, eval_batch_size, device, model_name=None,
                  max_cpt_num=20, max_seq_length=128, is_inhouse=True, inhouse_train_qids_path=None,
-                 subsample=1.0):
+                 subsample=1.0, format=[]):
         super().__init__()
         self.batch_size = batch_size
         self.eval_batch_size = eval_batch_size
@@ -104,11 +96,11 @@ class GconAttnDataLoader(object):
         self.vocab = None
 
         model_type = MODEL_NAME_TO_CLASS.get(model_name, 'lstm')
-        self.train_qids, self.train_labels, *self.train_data = load_input_tensors(train_statement_path, model_type, model_name, max_seq_length)
-        self.dev_qids, self.dev_labels, *self.dev_data = load_input_tensors(dev_statement_path, model_type, model_name, max_seq_length)
+        self.train_qids, self.train_labels, *self.train_data = load_input_tensors(train_statement_path, model_type, model_name, max_seq_length, format=format)
+        self.dev_qids, self.dev_labels, *self.dev_data = load_input_tensors(dev_statement_path, model_type, model_name, max_seq_length, format=format)
         self.num_choice = None
         if test_statement_path is not None:
-            self.test_qids, self.test_labels, *self.test_data = load_input_tensors(test_statement_path, model_type, model_name, max_seq_length)
+            self.test_qids, self.test_labels, *self.test_data = load_input_tensors(test_statement_path, model_type, model_name, max_seq_length, format=format)
 
         self.num_choice = self.train_data[0].size(1)
         self._load_concept_idx(concept2id_path)

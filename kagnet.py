@@ -1,17 +1,8 @@
-import torch
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import numpy as np
 import random
-import os
-import copy
-import time
-import argparse
-from transformers import (AdamW, ConstantLRSchedule, WarmupLinearSchedule, WarmupConstantSchedule)
+
 from modeling.modeling_kagnet import *
+from utils.optimization_utils import *
 from utils.utils import *
-from utils.optimization_utils import OPTIMIZER_CLASSES
 
 
 def evaluate_accuracy(eval_set, model, model_type):
@@ -132,7 +123,7 @@ def train(args):
                                    args.test_statements, args.test_paths, args.test_graphs,
                                    batch_size=args.mini_batch_size, eval_batch_size=args.eval_batch_size, device=(device0, device1),
                                    model_name=args.encoder, max_seq_length=args.max_seq_len, max_path_len=args.max_path_len,
-                                   is_inhouse=args.inhouse, inhouse_train_qids_path=args.inhouse_train_qids, use_cache=args.use_cache)
+                                   is_inhouse=args.inhouse, inhouse_train_qids_path=args.inhouse_train_qids, use_cache=args.use_cache, format=args.format)
         print('dataset done')
 
         ###################################################################################################

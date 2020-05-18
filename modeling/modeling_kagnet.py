@@ -1,20 +1,12 @@
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
+import dgl.function as fn
+import networkx as nx
 import torch.utils.data as data
 from torch.nn import init
-import dgl
-import dgl.function as fn
-import numpy as np
-import json
-from tqdm import tqdm
-import pickle
-import os
-import networkx as nx
-from utils.data_utils import *
-from utils.parser_utils import *
+
 from modeling.modeling_encoder import TextEncoder, MODEL_NAME_TO_CLASS
+from utils.data_utils import *
 from utils.layers import *
+from utils.parser_utils import *
 
 gcn_msg = fn.copy_src(src='h', out='m')
 gcn_reduce = fn.sum(msg='m', out='h')
@@ -433,7 +425,7 @@ class KagNetDataLoader(data.Dataset):
     def __init__(self, train_statement_path: str, train_path_jsonl: str, train_ngx_jsonl: str, dev_statement_path: str,
                  dev_path_jsonl: str, dev_ngx_jsonl: str, test_statement_path: str, test_path_jsonl: str, test_ngx_jsonl: str,
                  batch_size, eval_batch_size, device, max_path_len=5, max_seq_length=128, model_name=None,
-                 is_inhouse=True, inhouse_train_qids_path=None, use_cache=True):
+                 is_inhouse=True, inhouse_train_qids_path=None, use_cache=True, format=[]):
         super(KagNetDataLoader, self).__init__()
         self.batch_size = batch_size
         self.eval_batch_size = eval_batch_size
@@ -442,10 +434,10 @@ class KagNetDataLoader(data.Dataset):
         self.vocab = None
         model_type = MODEL_NAME_TO_CLASS.get(model_name, 'lstm')
 
-        self.train_qids, self.train_labels, *self.train_encoder_data = load_input_tensors(train_statement_path, model_type, model_name, max_seq_length)
-        self.dev_qids, self.dev_labels, *self.dev_encoder_data = load_input_tensors(dev_statement_path, model_type, model_name, max_seq_length)
+        self.train_qids, self.train_labels, *self.train_encoder_data = load_input_tensors(train_statement_path, model_type, model_name, max_seq_length, format=format)
+        self.dev_qids, self.dev_labels, *self.dev_encoder_data = load_input_tensors(dev_statement_path, model_type, model_name, max_seq_length, format=format)
         if test_statement_path is not None:
-            self.test_qids, self.test_labels, *self.test_encoder_data = load_input_tensors(test_statement_path, model_type, model_name, max_seq_length)
+            self.test_qids, self.test_labels, *self.test_encoder_data = load_input_tensors(test_statement_path, model_type, model_name, max_seq_length, format=format)
         self.num_choice = self.train_encoder_data[0].size(1)
 
         # self.qa_pair_data, self.cpt_path_data, self.rel_path_data, self.qa_path_num_data, self.path_len_data

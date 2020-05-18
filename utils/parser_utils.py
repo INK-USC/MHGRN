@@ -1,6 +1,4 @@
-import argparse
 from utils.utils import *
-from modeling.modeling_encoder import MODEL_NAME_TO_CLASS
 
 ENCODER_DEFAULT_LR = {
     'default': 1e-3,
@@ -10,6 +8,7 @@ ENCODER_DEFAULT_LR = {
         'bert-base-uncased': 3e-5,
         'bert-large-uncased': 2e-5,
         'roberta-large': 1e-5,
+        'albert-xxlarge-v2': 1e-5,
     },
     'obqa': {
         'lstm': 3e-4,
@@ -17,6 +16,8 @@ ENCODER_DEFAULT_LR = {
         'bert-base-cased': 1e-4,
         'bert-large-cased': 1e-4,
         'roberta-large': 1e-5,
+        'albert-xxlarge-v2': 1e-5,
+        'aristo-roberta-large': 1e-5,
     }
 }
 
@@ -53,6 +54,7 @@ def add_data_arguments(parser):
     parser.add_argument('--test_statements', default='./data/{dataset}/statement/test.statement.jsonl')
     # preprocessing options
     parser.add_argument('-sl', '--max_seq_len', default=64, type=int)
+    parser.add_argument('--format', default=[], choices=['add_qa_prefix', 'no_extra_sep', 'fairseq', 'add_prefix_space'], nargs='*')
     # set dataset defaults
     args, _ = parser.parse_known_args()
     parser.set_defaults(ent_emb_paths=[EMB_PATHS.get(s) for s in args.ent_emb],

@@ -1,17 +1,9 @@
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.utils.data as data
-from torch.nn.utils.rnn import pad_sequence
-import numpy as np
 import random
-import argparse
-from transformers import (AdamW, ConstantLRSchedule, WarmupConstantSchedule, WarmupLinearSchedule)
+
 from modeling.modeling_kvmem import *
 from utils.datasets import *
+from utils.optimization_utils import *
 from utils.parser_utils import *
-from utils.optimization_utils import OPTIMIZER_CLASSES
-from tqdm import tqdm
 
 DECODER_DEFAULT_LR = {'csqa': 1e-3, 'obqa': 1e-3}
 
@@ -148,7 +140,7 @@ def train(args):
                                 concept2id_path=args.cpnet_vocab_path, batch_size=args.batch_size, eval_batch_size=args.eval_batch_size,
                                 device=(device0, device1), model_name=args.encoder, max_triple_num=args.max_triple_num,
                                 max_seq_length=args.max_seq_len, is_inhouse=args.inhouse, inhouse_train_qids_path=args.inhouse_train_qids,
-                                subsample=args.subsample)
+                                subsample=args.subsample, format=args.format)
 
         print('len(train_set): {}   len(dev_set): {}   len(test_set): {}'.format(dataset.train_size(), dataset.dev_size(), dataset.test_size()))
         print()
