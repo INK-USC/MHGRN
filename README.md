@@ -81,7 +81,7 @@ First, you need to download all the necessary data in order to train the model:
 
 ```bash
 git clone https://github.com/INK-USC/MHGRN.git
-cd LM-GNN-QA
+cd MHGRN
 bash scripts/download.sh
 ```
 
