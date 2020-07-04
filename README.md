@@ -55,7 +55,7 @@ Entity embeddings are packed into a matrix of shape (#ent, dim) and stored in nu
 
 - [Python](<https://www.python.org/>) >= 3.6
 - [PyTorch](<https://pytorch.org/get-started/locally/>) == 1.1
-- [transformers](<https://github.com/huggingface/transformers/tree/v2.0.0>) == 2.0.0
+- [transformers](<https://github.com/huggingface/transformers/tree/v2.4.0>) == 2.4.0
 - [tqdm](<https://github.com/tqdm/tqdm>)
 - [dgl](<https://github.com/dmlc/dgl>) == 0.3 (GPU version)
 - [networkx](<https://networkx.github.io/>) == 2.3
