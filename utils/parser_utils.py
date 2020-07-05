@@ -8,7 +8,6 @@ ENCODER_DEFAULT_LR = {
         'bert-base-uncased': 3e-5,
         'bert-large-uncased': 2e-5,
         'roberta-large': 1e-5,
-        'albert-xxlarge-v2': 1e-5,
     },
     'obqa': {
         'lstm': 3e-4,
@@ -16,8 +15,6 @@ ENCODER_DEFAULT_LR = {
         'bert-base-cased': 1e-4,
         'bert-large-cased': 1e-4,
         'roberta-large': 1e-5,
-        'albert-xxlarge-v2': 1e-5,
-        'aristo-roberta-large': 1e-5,
     }
 }
 

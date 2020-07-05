@@ -1,8 +1,9 @@
+import pickle
+
 import dgl
 import numpy as np
-import pickle
 import torch
-from transformers import (OpenAIGPTTokenizer, BertTokenizer, XLNetTokenizer, RobertaTokenizer, AlbertTokenizer)
+from transformers import (OpenAIGPTTokenizer, BertTokenizer, XLNetTokenizer, RobertaTokenizer)
 
 from utils.tokenization_utils import *
 
@@ -403,8 +404,8 @@ def load_adj_data(adj_pk_path, max_node_num, num_choice, emb_pk_path=None):
         concept_ids[idx, :num_concept] = torch.tensor(concepts)  # note : concept zero padding is disabled
 
         adj_lengths[idx] = num_concept
-        node_type_ids[idx, :num_concept][torch.tensor(qm, dtype=torch.bool)[:num_concept]] = 0
-        node_type_ids[idx, :num_concept][torch.tensor(am, dtype=torch.bool)[:num_concept]] = 1
+        node_type_ids[idx, :num_concept][torch.tensor(qm, dtype=torch.uint8)[:num_concept]] = 0
+        node_type_ids[idx, :num_concept][torch.tensor(am, dtype=torch.uint8)[:num_concept]] = 1
         ij = torch.tensor(adj.row, dtype=torch.int64)
         k = torch.tensor(adj.col, dtype=torch.int64)
         n_node = adj.shape[1]
@@ -674,12 +675,11 @@ def load_bert_xlnet_roberta_input_tensors(statement_jsonl_path, model_type, mode
         all_input_ids = torch.tensor(select_field(features, 'input_ids'), dtype=torch.long)
         all_input_mask = torch.tensor(select_field(features, 'input_mask'), dtype=torch.long)
         all_segment_ids = torch.tensor(select_field(features, 'segment_ids'), dtype=torch.long)
-        all_output_mask = torch.tensor(select_field(features, 'output_mask'), dtype=torch.bool)
+        all_output_mask = torch.tensor(select_field(features, 'output_mask'), dtype=torch.uint8)
         all_label = torch.tensor([f.label for f in features], dtype=torch.long)
         return all_input_ids, all_input_mask, all_segment_ids, all_output_mask, all_label
 
-    tokenizer_class = {'bert': BertTokenizer, 'xlnet': XLNetTokenizer,
-                       'roberta': RobertaTokenizer, 'albert': AlbertTokenizer}.get(model_type)
+    tokenizer_class = {'bert': BertTokenizer, 'xlnet': XLNetTokenizer, 'roberta': RobertaTokenizer}.get(model_type)
     tokenizer = tokenizer_class.from_pretrained(model_name)
     examples = read_examples(statement_jsonl_path)
 
@@ -699,170 +699,6 @@ def load_bert_xlnet_roberta_input_tensors(statement_jsonl_path, model_type, mode
                                             pad_on_left=bool(model_type in ['xlnet']),  # pad on the left for xlnet
                                             pad_token_segment_id=4 if model_type in ['xlnet'] else 0,
                                             sequence_b_segment_id=0 if model_type in ['roberta'] else 1)
-
-    example_ids = [f.example_id for f in features]
-    *data_tensors, all_label = convert_features_to_tensors(features)
-
-    # input_ids = data_tensors[0]
-    # for i in range(1):
-    #     for j in range(input_ids[i].size(0)):
-    #         token_ids = input_ids[i, j].numpy().tolist()
-    #         print(tokenizer.convert_ids_to_tokens(token_ids))
-    #         print()
-
-    return (example_ids, all_label, *data_tensors)
-
-
-def load_robert_input_tensors_with_context(statement_jsonl_path, max_seq_length):
-
-    class InputExample(object):
-
-        def __init__(self, example_id, question, contexts, choices, label=None):
-            self.example_id = example_id
-            self.question = question
-            self.contexts = contexts
-            self.choices = choices
-            self.label = label
-
-    class InputFeatures(object):
-
-        def __init__(self, example_id, choices_features, label):
-            self.example_id = example_id
-            self.choices_features = [
-                {
-                    'input_ids': input_ids,
-                    'input_mask': input_mask,
-                    # 'segment_ids': segment_ids,
-                    # 'output_mask': output_mask,
-                }
-                for _, input_ids, input_mask in choices_features
-            ]
-            self.label = label
-
-    def read_examples(input_file):
-        with open(input_file, "r", encoding="utf-8") as f:
-            examples = []
-            for line in f.readlines():
-                json_dic = json.loads(line)
-                label = ord(json_dic["answerKey"]) - ord("A") if 'answerKey' in json_dic else 0
-                examples.append(
-                    InputExample(
-                        example_id=json_dic["id"],
-                        question=[json_dic["question"]["stem"]] * len(json_dic["question"]["choices"]),
-                        contexts=[json_dic["para"]] * len(json_dic["question"]["choices"]),
-                        choices=[ending["text"] for ending in json_dic["question"]["choices"]],
-                        label=label
-                    ))
-        return examples
-
-    def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer, cls_token='[CLS]', sep_token='[SEP]'):
-
-        label_map = {label: i for i, label in enumerate(label_list)}
-
-        features = []
-        format = "c#q#_a!"
-        max_tokens = max_seq_length - 2 * 2 - 1 - 1
-        sep_mult = 2
-        for idx, example in enumerate(examples):
-            choices_features = []
-            for ending_idx, (question, context, choice) in enumerate(zip(example.question, example.contexts, example.choices)):
-                if context is not None:
-                    context_tokens = tokenizer.tokenize(context)
-                else:
-                    context_tokens = []
-                question_tokens = tokenizer.tokenize(question)
-                choice_tokens = tokenizer.tokenize(choice)
-                context_tokens, question_tokens, choice_tokens = _truncate_tokens(context_tokens,
-                                                                                  question_tokens,
-                                                                                  choice_tokens,
-                                                                                  max_tokens)
-                tokens = [cls_token]
-                segment_ids = [0]
-                current_segment = 0
-                token_dict = {"q": question_tokens, "c": context_tokens, "a": choice_tokens}
-                for c in format:
-                    if c in "qca":
-                        new_tokens = token_dict[c]
-                        tokens += new_tokens
-                        segment_ids += len(new_tokens) * [current_segment]
-                    elif c == "#":
-                        tokens += sep_mult * [sep_token]
-                        segment_ids += sep_mult * [current_segment]
-                    elif c == "!":
-                        tokens += [sep_token]
-                        segment_ids += [current_segment]
-                    elif c == "_":
-                        current_segment += 1
-                    else:
-                        raise ValueError(f"Unknown context_syntax character {c} in {format}")
-
-                input_ids = tokenizer.convert_tokens_to_ids(tokens)
-
-                # The mask has 1 for real tokens and 0 for padding tokens. Only real
-                # tokens are attended to.
-
-                input_mask = [1] * len(input_ids)
-                special_token_id = tokenizer.convert_tokens_to_ids([cls_token, sep_token])
-                output_mask = [1 if id in special_token_id else 0 for id in input_ids]  # 1 for mask
-
-                # Zero-pad up to the sequence length.
-                padding_length = max_seq_length - len(input_ids)
-
-                input_ids = input_ids + ([0] * padding_length)
-                input_mask = input_mask + ([0] * padding_length)
-                # output_mask = output_mask + ([1] * padding_length)
-                segment_ids = segment_ids + ([segment_ids[-1] + 1] * padding_length)
-
-                assert len(input_ids) == max_seq_length
-                # assert len(output_mask) == max_seq_length
-                assert len(input_mask) == max_seq_length
-                assert len(segment_ids) == max_seq_length
-                # choices_features.append((tokens, input_ids, input_mask, segment_ids, output_mask))
-                choices_features.append((tokens, input_ids, input_mask))
-            label = label_map[example.label]
-            features.append(InputFeatures(example_id=example.example_id, choices_features=choices_features, label=label))
-        return features
-
-    def _truncate_tokens(context_tokens, question_tokens, choice_tokens, max_length):
-        """
-        Truncate context_tokens first, from the left, then question_tokens and choice_tokens
-        """
-        max_context_len = max_length - len(question_tokens) - len(choice_tokens)
-        if max_context_len >= 0:
-            if len(context_tokens) > max_context_len:
-                context_tokens = context_tokens[-max_context_len:]
-        else:
-            context_tokens = []
-            while len(question_tokens) + len(choice_tokens) > max_length:
-                if len(question_tokens) > len(choice_tokens):
-                    question_tokens.pop(0)
-                else:
-                    choice_tokens.pop()
-        return context_tokens, question_tokens, choice_tokens
-
-    def select_field(features, field):
-        return [[choice[field] for choice in feature.choices_features] for feature in features]
-
-    def convert_features_to_tensors(features):
-        all_input_ids = torch.tensor(select_field(features, 'input_ids'), dtype=torch.long)
-        all_input_mask = torch.tensor(select_field(features, 'input_mask'), dtype=torch.long)
-        # all_segment_ids = torch.tensor(select_field(features, 'segment_ids'), dtype=torch.long)
-        # all_output_mask = torch.tensor(select_field(features, 'output_mask'), dtype=torch.uint8)
-        all_label = torch.tensor([f.label for f in features], dtype=torch.long)
-        return all_input_ids, all_input_mask, all_label
-        # return all_input_ids, all_input_mask, all_segment_ids, all_output_mask, all_label
-
-    tokenizer = RobertaTokenizer.from_pretrained('roberta-large')
-    examples = read_examples(statement_jsonl_path)
-
-    # if any(x in format for x in ('add_qa_prefix', 'fairseq')):
-    #     for example in examples:
-    #         example.contexts = ['Q: ' + c for c in example.contexts]
-    #         example.endings = ['A: ' + e for e in example.endings]
-
-    features = convert_examples_to_features(examples, list(range(len(examples[0].choices))), max_seq_length, tokenizer,
-                                            cls_token=tokenizer.cls_token,
-                                            sep_token=tokenizer.sep_token,)
 
     example_ids = [f.example_id for f in features]
     *data_tensors, all_label = convert_features_to_tensors(features)
@@ -908,13 +744,11 @@ def load_lstm_input_tensors(input_jsonl_path, max_seq_length):
 
 
 def load_input_tensors(input_jsonl_path, model_type, model_name, max_seq_length, format=[]):
-    if 'aristo' in format:
-        return load_robert_input_tensors_with_context(input_jsonl_path, max_seq_length)
     if model_type in ('lstm',):
         return load_lstm_input_tensors(input_jsonl_path, max_seq_length)
     elif model_type in ('gpt',):
         return load_gpt_input_tensors(input_jsonl_path, max_seq_length)
-    elif model_type in ('bert', 'xlnet', 'roberta', 'albert'):
+    elif model_type in ('bert', 'xlnet', 'roberta'):
         return load_bert_xlnet_roberta_input_tensors(input_jsonl_path, model_type, model_name, max_seq_length, format=format)
 
 

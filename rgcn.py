@@ -1,7 +1,9 @@
 import random
 
+from transformers import (ConstantLRSchedule, WarmupLinearSchedule, WarmupConstantSchedule)
+
 from modeling.modeling_rgcn import *
-from utils.optimization_utils import *
+from utils.optimization_utils import OPTIMIZER_CLASSES
 from utils.parser_utils import *
 from utils.relpath_utils import *
 

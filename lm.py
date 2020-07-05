@@ -3,9 +3,10 @@ import random
 import numpy as np
 import torch.nn.functional as F
 from tqdm import tqdm
+from transformers import WarmupLinearSchedule, WarmupConstantSchedule, ConstantLRSchedule
 
 from modeling.modeling_lm import *
-from utils.optimization_utils import *
+from utils.optimization_utils import OPTIMIZER_CLASSES
 from utils.parser_utils import *
 from utils.utils import *
 
@@ -240,7 +241,7 @@ def pred(args):  # Note: pred mode ALWAYS uses the official split
     dev_pred_path = os.path.join(args.save_dir, 'predictions_dev.csv')
     test_pred_path = os.path.join(args.save_dir, 'predictions_test.csv')
     model_path = os.path.join(args.save_dir, 'model.pt')
-    model, old_args = torch.load(model_path)
+    old_args, model = torch.load(model_path)
     device = torch.device("cuda:0" if torch.cuda.is_available() and args.cuda else "cpu")
     model.to(device)
     model.eval()

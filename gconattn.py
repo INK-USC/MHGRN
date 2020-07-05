@@ -1,13 +1,15 @@
 import random
 
+from tqdm import tqdm
+from transformers import (ConstantLRSchedule, WarmupConstantSchedule, WarmupLinearSchedule)
+
 from modeling.modeling_gconattn import *
 from utils.datasets import *
-from utils.optimization_utils import *
+from utils.optimization_utils import OPTIMIZER_CLASSES
 from utils.parser_utils import *
 from utils.utils import *
 
 DECODER_DEFAULT_LR = {'csqa': 3e-4, 'obqa': 1e-4}
-
 
 def evaluate_accuracy(eval_set, model):
     n_samples, n_correct = 0, 0

@@ -1,17 +1,18 @@
-from transformers import AutoModel, AutoConfig
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import numpy as np
 from transformers import (OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-                          XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
-                          ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP)
-
-from utils.data_utils import get_gpt_token_num
+                          XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP)
+from transformers import AutoModel
 from utils.layers import *
+from utils.data_utils import get_gpt_token_num
 
 MODEL_CLASS_TO_NAME = {
     'gpt': list(OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP.keys()),
     'bert': list(BERT_PRETRAINED_CONFIG_ARCHIVE_MAP.keys()),
     'xlnet': list(XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP.keys()),
     'roberta': list(ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP.keys()),
-    'albert': list(ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys()),
     'lstm': ['lstm'],
 }
 
@@ -75,19 +76,17 @@ class LSTMTextEncoder(nn.Module):
 class TextEncoder(nn.Module):
     valid_model_types = set(MODEL_CLASS_TO_NAME.keys())
 
-    def __init__(self, model_name, output_token_states=False, from_checkpoint=None, use_segment_id=True, **kwargs):
+    def __init__(self, model_name, output_token_states=False, from_checkpoint=None, **kwargs):
         super().__init__()
         self.model_type = MODEL_NAME_TO_CLASS[model_name]
         self.output_token_states = output_token_states
-        self.use_segment_id = use_segment_id
         assert not self.output_token_states or self.model_type in ('bert', 'roberta',)
 
         if self.model_type in ('lstm',):
             self.module = LSTMTextEncoder(**kwargs, output_hidden_states=True)
             self.sent_dim = self.module.output_size
         else:
-            config = AutoConfig.from_pretrained(model_name, output_hidden_states=True)
-            self.module = AutoModel.from_pretrained(model_name, config=config)
+            self.module = AutoModel.from_pretrained(model_name, output_hidden_states=True)
             if from_checkpoint is not None:
                 self.module = self.module.from_pretrained(from_checkpoint, output_hidden_states=True)
             if self.model_type in ('gpt',):
@@ -98,7 +97,6 @@ class TextEncoder(nn.Module):
         '''
         layer_id: only works for non-LSTM encoders
         output_token_states: if True, return hidden states of specific layer and attention masks
-        use_segment_id: if False, do not use token_type_ids and do not output token states
         '''
 
         if self.model_type in ('lstm',):  # lstm
@@ -108,13 +106,8 @@ class TextEncoder(nn.Module):
             input_ids, cls_token_ids, lm_labels = inputs  # lm_labels is not used
             outputs = self.module(input_ids)
         else:  # bert / xlnet / roberta
-            if self.use_segment_id:
-                input_ids, attention_mask, token_type_ids, output_mask = inputs
-                outputs = self.module(input_ids, token_type_ids=token_type_ids, attention_mask=attention_mask)
-            else:
-                assert not self.output_token_states
-                input_ids, attention_mask = inputs
-                outputs = self.module(input_ids, attention_mask=attention_mask)
+            input_ids, attention_mask, token_type_ids, output_mask = inputs
+            outputs = self.module(input_ids, token_type_ids=token_type_ids, attention_mask=attention_mask)
         all_hidden_states = outputs[-1]
         hidden_states = all_hidden_states[layer_id]
 
@@ -125,8 +118,6 @@ class TextEncoder(nn.Module):
             sent_vecs = hidden_states.gather(1, cls_token_ids).squeeze(1)
         elif self.model_type in ('xlnet',):
             sent_vecs = hidden_states[:, -1]
-        elif self.model_type in ('albert',):
-            sent_vecs = self.module.pooler_activation(self.module.pooler(hidden_states[:, 0]))
         else:  # bert / roberta
             if self.output_token_states:
                 return hidden_states, output_mask

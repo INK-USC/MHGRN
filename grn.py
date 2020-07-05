@@ -1,7 +1,9 @@
 import random
 
+from transformers import (ConstantLRSchedule, WarmupLinearSchedule, WarmupConstantSchedule)
+
 from modeling.modeling_grn import *
-from utils.optimization_utils import *
+from utils.optimization_utils import OPTIMIZER_CLASSES
 from utils.parser_utils import *
 from utils.relpath_utils import *
 
@@ -307,40 +309,7 @@ def eval(args):
 
 
 def pred(args):
-    dev_pred_path = os.path.join(args.save_dir, 'predictions_dev.csv')
-    test_pred_path = os.path.join(args.save_dir, 'predictions_test.csv')
-
-    model_path = os.path.join(args.save_dir, 'model.pt')
-    model, old_args = torch.load(model_path)
-    device = torch.device("cuda:0" if torch.cuda.is_available() and args.cuda else "cpu")
-    model.to(device)
-    model.eval()
-
-    use_contextualized = 'lm' in old_args.ent_emb
-    dataset = LMGraphRelationNetDataLoader(old_args.train_statements, old_args.train_adj,
-                                           old_args.dev_statements, old_args.dev_adj,
-                                           old_args.test_statements, old_args.test_adj,
-                                           batch_size=args.batch_size, eval_batch_size=args.eval_batch_size, device=(device, device),
-                                           model_name=old_args.encoder,
-                                           max_node_num=old_args.max_node_num, max_seq_length=old_args.max_seq_len,
-                                           is_inhouse=old_args.inhouse, inhouse_train_qids_path=old_args.inhouse_train_qids, use_contextualized=use_contextualized,
-                                           train_embs_path=old_args.train_embs, dev_embs_path=old_args.dev_embs, test_embs_path=old_args.test_embs,
-                                           subsample=old_args.subsample, format=old_args.format)
-
-    print()
-    print("***** generating model predictions *****")
-    print(f'| dataset: {old_args.dataset} | num_dev: {dataset.dev_size()} | num_test: {dataset.test_size()} | save_dir: {args.save_dir} |')
-
-    for output_path, data_loader in [(dev_pred_path, dataset.dev())] + ([(test_pred_path, dataset.test())] if dataset.test_size() > 0 else []):
-        with torch.no_grad(), open(output_path, 'w') as fout:
-            for qids, labels, *input_data in tqdm(data_loader):
-                logits, _ = model(*input_data)
-                for qid, pred_label in zip(qids, logits.argmax(1)):
-                    fout.write('{},{}\n'.format(qid, chr(ord('A') + pred_label.item())))
-        print(f'predictions saved to {output_path}')
-
-    print("***** prediction done *****")
-    print()
+    raise NotImplementedError()
 
 
 def decode(args):
