@@ -599,7 +599,7 @@ class GraphRelationNet(nn.Module):
         path_ids[:, ::2] = self.concept_ids.gather(1, entity_ids)
         return path_ids, path_lengths
 
-    def forward(self, sent_vecs, concept_ids, node_type_ids, adj_lengths, adj, emb_data=None, cache_output=False, disable_lm=False):
+    def forward(self, sent_vecs, concept_ids, node_type_ids, adj_lengths, adj, emb_data=None, cache_output=False):
         """
         sent_vecs: (batch_size, d_sent)
         concept_ids: (batch_size, n_node)
@@ -643,8 +643,7 @@ class GraphRelationNet(nn.Module):
             self.concept_ids = concept_ids
             self.adj = adj
             self.pool_attn = pool_attn
-        if disable_lm:
-            sent_vecs = torch.zeros((sent_vecs.size(0), sent_vecs.size(0)), dtype=torch.float, device=sent_vecs.device)
+
         concat = self.dropout_fc(torch.cat((graph_vecs, sent_vecs), 1))
         logits = self.fc(concat)
         return logits, pool_attn
@@ -677,7 +676,7 @@ class LMGraphRelationNet(nn.Module):
         path_lengths = path_lengths.view(bs, nc)
         return logits, path_ids, path_lengths
 
-    def forward(self, *inputs, layer_id=-1, cache_output=False, disable_lm=False):
+    def forward(self, *inputs, layer_id=-1, cache_output=False):
         """
         sent_vecs: (batch_size, num_choice, d_sent)
         concept_ids: (batch_size, num_choice, n_node)
@@ -694,12 +693,12 @@ class LMGraphRelationNet(nn.Module):
             emb_data = None
         else:
             *lm_inputs, concept_ids, node_type_ids, adj_lengths, emb_data, adj = inputs
-        if 'no_lm' in self.ablation:
-            sent_vecs = torch.ones((bs * nc, self.encoder.sent_dim), dtype=torch.float)
-        else:
+        if 'no_lm' not in self.ablation:
             sent_vecs, all_hidden_states = self.encoder(*lm_inputs, layer_id=layer_id)
+        else:
+            sent_vecs = torch.ones((bs * nc, self.encoder.sent_dim), dtype=torch.float)
         logits, attn = self.decoder(sent_vecs.to(concept_ids.device), concept_ids, node_type_ids, adj_lengths, adj,
-                                    emb_data=emb_data, cache_output=cache_output, disable_lm=disable_lm)
+                                    emb_data=emb_data, cache_output=cache_output)
         logits = logits.view(bs, nc)
         return logits, attn
 
