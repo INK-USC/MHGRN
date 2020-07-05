@@ -150,12 +150,6 @@ To search the parameters for BERT+RelationNet on CommonsenseQA:
 bash scripts/param_search_rn.sh csqa bert-large-uncased
 ```
 
-To **reproduce the reported results of MultiGRN** on CommonsenseQA official set:
-
-```
-bash scripts/run_grn_csqa.sh
-```
-
 ### 4. Training 
 
 Each graph encoding model is implemented in a single script:
@@ -201,6 +195,13 @@ To train a RelationNet with BERT-Large-Uncased as the encoder:
 ```bash
 python rn.py --encoder bert-large-uncased
 ```
+
+To **reproduce the reported results of MultiGRN** on CommonsenseQA official set:
+
+```
+bash scripts/run_grn_csqa.sh
+```
+
 
 ### 5. Evaluation
 
