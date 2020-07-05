@@ -3,12 +3,14 @@
 <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/9/96/Pytorch_logo.png/800px-Pytorch_logo.png" width="10%"> [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 This is the repo of our preprint [paper](https://yuchenlin.xyz/paper/mhgrn_arixv.pdf):
+
 ```
 Scalable Multi-Hop Relational Reasoning for Knowledge-Aware Question Answering
 Yanlin Feng*, Xinyue Chen*, Bill Yuchen Lin, Peifeng Wang, Jun Yan and Xiang Ren
 arixv cs.CL 
 *=equal contritbution
 ```
+
 This repository also implements other graph encoding models for question answering (including vanilla LM finetuning).
 
 - **RelationNet**
@@ -57,7 +59,7 @@ Entity embeddings are packed into a matrix of shape (#ent, dim) and stored in nu
 
 - [Python](<https://www.python.org/>) >= 3.6
 - [PyTorch](<https://pytorch.org/get-started/locally/>) == 1.1.0
-- [transformers](<https://github.com/huggingface/transformers/tree/v2.4.0>) == 2.4.0
+- [transformers](<https://github.com/huggingface/transformers/tree/v2.0.0>) == 2.0.0
 - [tqdm](<https://github.com/tqdm/tqdm>)
 - [dgl](<https://github.com/dmlc/dgl>) == 0.3.1 (GPU version)
 - [networkx](<https://networkx.github.io/>) == 2.3
@@ -69,7 +71,7 @@ conda create -n krqa python=3.6 numpy matplotlib ipython
 source activate krqa
 conda install pytorch=1.1.0 torchvision cudatoolkit=10.0 -c pytorch
 pip install dgl-cu100==0.3.1
-pip install transformers==2.4.0 tqdm networkx==2.3 nltk spacy==2.1.6
+pip install transformers==2.0.0 tqdm networkx==2.3 nltk spacy==2.1.6
 python -m spacy download en
 ```
 
@@ -148,6 +150,12 @@ To search the parameters for BERT+RelationNet on CommonsenseQA:
 bash scripts/param_search_rn.sh csqa bert-large-uncased
 ```
 
+To **reproduce the reported results of MultiGRN** on CommonsenseQA official set:
+
+```
+bash scripts/run_grn_csqa.sh
+```
+
 ### 4. Training 
 
 Each graph encoding model is implemented in a single script:
@@ -157,10 +165,10 @@ Each graph encoding model is implemented in a single script:
 | None                                                         | lm.py       | w/o knowledge graph                                          |
 | [Relation Network](<https://papers.nips.cc/paper/7082-a-simple-neural-network-module-for-relational-reasoning.pdf>) | rn.py       |                                                              |
 | [R-GCN](<https://arxiv.org/pdf/1703.06103.pdf>)              | rgcn.py     | Use `--gnn_layer_num ` and `--num_basis` to specify #layer and #basis |
-| [KagNet](https://arxiv.org/abs/1909.02151)                                                       | kagnet.py   | Adapted from <https://github.com/INK-USC/KagNet>, still tuning      |
+| [KagNet](https://arxiv.org/abs/1909.02151)                   | kagnet.py   | Adapted from <https://github.com/INK-USC/KagNet>, still tuning |
 | Gcon-Attn                                                    | gconattn.py |                                                              |
 | KV-Memory                                                    | kvmem.py    |                                                              |
-| MHGRN                                                     | grn.py      |                                                              |
+| MHGRN                                                        | grn.py      |                                                              |
 
 Some important command line arguments are listed as follows (run `python {lm,rn,rgcn,...}.py -h` for a complete list):
 
@@ -211,4 +219,3 @@ python {lm,rn,rgcn,...}.py --mode eval [ --save_dir path/to/directory/ ]
 - Modify `preprocess.py` and perform subgraph extraction for your data
 - Modify `utils/parser_utils.py` to support your own dataset
 - Tune `encoder_lr`,`decoder_lr` and other important hyperparameters, modify `utils/parser_utils.py` and `{model}.py` to record the tuned hyperparameters
-
