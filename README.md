@@ -54,7 +54,7 @@ Entity embeddings are packed into a matrix of shape (#ent, dim) and stored in nu
 ## Dependencies
 
 - [Python](<https://www.python.org/>) >= 3.6
-- [PyTorch](<https://pytorch.org/get-started/locally/>) == 1.3.1
+- [PyTorch](<https://pytorch.org/get-started/locally/>) == 1.1.0
 - [transformers](<https://github.com/huggingface/transformers/tree/v2.4.0>) == 2.4.0
 - [tqdm](<https://github.com/tqdm/tqdm>)
 - [dgl](<https://github.com/dmlc/dgl>) == 0.3.1 (GPU version)
@@ -65,7 +65,7 @@ Run the following commands to create a conda environment (assume CUDA10):
 ```bash
 conda create -n krqa python=3.6 numpy matplotlib ipython
 source activate krqa
-conda install pytorch=1.3.1 torchvision cudatoolkit=10.0 -c pytorch
+conda install pytorch=1.1.0 torchvision cudatoolkit=10.0 -c pytorch
 pip install dgl-cu100==0.3.1
 pip install transformers==2.4.0 tqdm networkx==2.3 nltk spacy==2.1.6
 python -m spacy download en
