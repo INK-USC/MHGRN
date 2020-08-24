@@ -151,9 +151,8 @@ class GconAttnDataLoader(object):
         ac = []
         qc_len, ac_len = [], []
         for data in tqdm(concept_data, total=n, desc='loading concepts'):
-            # leave index 0 for padding
-            cur_qc = [self.concept2id[x] + 1 for x in data['qc']][:self.max_cpt_num]
-            cur_ac = [self.concept2id[x] + 1 for x in data['ac']][:self.max_cpt_num]
+            cur_qc = [self.concept2id[x] for x in data['qc']][:self.max_cpt_num]
+            cur_ac = [self.concept2id[x] for x in data['ac']][:self.max_cpt_num]
             qc.append(cur_qc + [0] * (self.max_cpt_num - len(cur_qc)))
             ac.append(cur_ac + [0] * (self.max_cpt_num - len(cur_ac)))
             assert len(qc[-1]) == len(ac[-1]) == self.max_cpt_num
