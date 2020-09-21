@@ -1,4 +1,4 @@
-# Multi-Hop Graph Relation Networks
+# Multi-Hop Graph Relation Networks (EMNLP 2020)
 
 <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/9/96/Pytorch_logo.png/800px-Pytorch_logo.png" width="10%"> [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -6,8 +6,8 @@ This is the repo of our preprint [paper](https://yuchenlin.xyz/paper/mhgrn_arixv
 
 ```
 Scalable Multi-Hop Relational Reasoning for Knowledge-Aware Question Answering
-Yanlin Feng*, Xinyue Chen*, Bill Yuchen Lin, Peifeng Wang, Jun Yan and Xiang Ren
-arixv cs.CL 
+Yanlin Feng*, Xinyue Chen*, Bill Yuchen Lin, Peifeng Wang, Jun Yan and Xiang Ren.
+EMNLP 2020.
 *=equal contritbution
 ```
 
