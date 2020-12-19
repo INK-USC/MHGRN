@@ -697,6 +697,7 @@ def load_bert_xlnet_roberta_input_tensors(statement_jsonl_path, model_type, mode
                                                                  and 'fairseq' not in format),
                                             cls_token_segment_id=2 if model_type in ['xlnet'] else 0,
                                             pad_on_left=bool(model_type in ['xlnet']),  # pad on the left for xlnet
+                                            pad_token=tokenizer.pad_token_id or 0,
                                             pad_token_segment_id=4 if model_type in ['xlnet'] else 0,
                                             sequence_b_segment_id=0 if model_type in ['roberta'] else 1)
 
