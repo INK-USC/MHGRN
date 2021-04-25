@@ -118,8 +118,6 @@ def train(args):
                        num_attention_heads=args.att_head_num, fc_dim=args.fc_dim, num_fc_layers=args.fc_layer_num,
                        p_gnn=args.dropoutg, p_fc=args.dropoutf, freeze_ent_emb=args.freeze_ent_emb,
                        pretrained_concept_emb=cp_emb, diag_decompose=args.diag_decompose, ablation=args.ablation, encoder_config=lstm_config)
-        if args.freeze_ent_emb:
-            freeze_net(model.decoder.concept_emb)
         model.to(device)
     except RuntimeError as e:
         print(e)
