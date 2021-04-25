@@ -187,6 +187,8 @@ def concepts_to_adj_matrices_2hop_all_pair(data):
             if qid != aid and qid in cpnet_simple.nodes and aid in cpnet_simple.nodes:
                 extra_nodes |= set(cpnet_simple[qid]) & set(cpnet_simple[aid])
     extra_nodes = extra_nodes - qa_nodes
+    if len(qa_nodes) == 0 and len(extra_nodes) == 0:
+        extra_nodes = {0}  # if there's no detected concept, add a dummy node as the extra node
     schema_graph = sorted(qc_ids) + sorted(ac_ids) + sorted(extra_nodes)
     arange = np.arange(len(schema_graph))
     qmask = arange < len(qc_ids)
