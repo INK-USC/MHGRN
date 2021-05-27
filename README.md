@@ -2,7 +2,7 @@
 
 <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/9/96/Pytorch_logo.png/800px-Pytorch_logo.png" width="10%"> [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-This is the repo of our preprint [paper](https://yuchenlin.xyz/paper/mhgrn_arixv.pdf):
+This is the repo of our preprint [paper](https://arxiv.org/abs/2005.00646):
 
 ```
 Scalable Multi-Hop Relational Reasoning for Knowledge-Aware Question Answering
