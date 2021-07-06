@@ -34,14 +34,16 @@ Each model supports the following text encoders:
 
 We provide preprocessed ConceptNet and pretrained entity embeddings for your own usage. These resources are independent of the source code.
 
+***Note that the following reousrces can be download [here](https://drive.google.com/drive/folders/155codqEnsKazO8-BchF3rO_cP3EyYdws).***
+
 ### ConceptNet (5.6.0)
 
 | Description                  | Downloads                                                    | Notes                                                        |
 | ---------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| Entity Vocab                 | [entity-vocab](https://csr.s3-us-west-1.amazonaws.com/concept.txt) | one entity per line, space replaced by '_'                   |
-| Relation Vocab               | [relation-vocab](https://csr.s3-us-west-1.amazonaws.com/relation.txt) | one relation per line, merged                                |
-| ConceptNet (CSV format)      | [conceptnet-5.6.0-csv](https://csr.s3-us-west-1.amazonaws.com/conceptnet.en.csv) | English tuples extracted from the full conceptnet with merged relations |
-| ConceptNet (NetworkX format) | [conceptnet-5.6.0-networkx](https://csr.s3-us-west-1.amazonaws.com/conceptnet.en.pruned.graph) | NetworkX pickled format, pruned by filtering out stop words  |
+| Entity Vocab                 | [entity-vocab](https://drive.google.com/drive/folders/155codqEnsKazO8-BchF3rO_cP3EyYdws) | one entity per line, space replaced by '_'                   |
+| Relation Vocab               | [relation-vocab](https://drive.google.com/drive/folders/155codqEnsKazO8-BchF3rO_cP3EyYdws) | one relation per line, merged                                |
+| ConceptNet (CSV format)      | [conceptnet-5.6.0-csv](https://drive.google.com/drive/folders/155codqEnsKazO8-BchF3rO_cP3EyYdws) | English tuples extracted from the full conceptnet with merged relations |
+| ConceptNet (NetworkX format) | [conceptnet-5.6.0-networkx](https://drive.google.com/drive/folders/155codqEnsKazO8-BchF3rO_cP3EyYdws) | NetworkX pickled format, pruned by filtering out stop words  |
 
 ### Entity Embeddings (Node Features)
 
@@ -49,9 +51,9 @@ Entity embeddings are packed into a matrix of shape (#ent, dim) and stored in nu
 
 | Embedding Model | Dimensionality | Description                                               | Downloads                                                    |
 | --------------- | -------------- | --------------------------------------------------------- | ------------------------------------------------------------ |
-| TransE          | 100            | Obtained using OpenKE with optim=sgd, lr=1e-3, epoch=1000 | [entities](<https://csr.s3-us-west-1.amazonaws.com/glove.transe.sgd.ent.npy>) [relations](<https://csr.s3-us-west-1.amazonaws.com/glove.transe.sgd.rel.npy>) |
-| NumberBatch     | 300            | <https://github.com/commonsense/conceptnet-numberbatch>   | [entities](<https://csr.s3-us-west-1.amazonaws.com/concept.nb.npy>) |
-| BERT-based      | 1024           | Provided by Zhengwei                                      | [entities](https://csr.s3-us-west-1.amazonaws.com/tzw.ent.npy) |
+| TransE          | 100            | Obtained using OpenKE with optim=sgd, lr=1e-3, epoch=1000 | [entities](<https://drive.google.com/drive/folders/155codqEnsKazO8-BchF3rO_cP3EyYdws>) [relations](<https://drive.google.com/drive/folders/155codqEnsKazO8-BchF3rO_cP3EyYdws>) |
+| NumberBatch     | 300            | <https://github.com/commonsense/conceptnet-numberbatch>   | [entities](<https://drive.google.com/drive/folders/155codqEnsKazO8-BchF3rO_cP3EyYdws>) |
+| BERT-based      | 1024           | Provided by Zhengwei                                      | [entities](https://drive.google.com/drive/folders/155codqEnsKazO8-BchF3rO_cP3EyYdws) |
 
 
 
