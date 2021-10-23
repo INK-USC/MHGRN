@@ -27,7 +27,7 @@ np.random.seed(args.seed)
 def read_file(filename):
     nrow = sum(1 for _ in open(filename, 'r'))
     li = []
-    with open(filename, 'r') as fin:
+    with open(filename, 'r', encoding='utf-8') as fin:
         for line in tqdm(fin, total=nrow):
             json_line = json.loads(line)
             li.append(json_line)
@@ -50,7 +50,7 @@ for length in cnt:
 
 
 for split in ['train', 'dev']:
-    with open(params['tgt'][split].format(ds=args.ds), 'w') as fout:
+    with open(params['tgt'][split].format(ds=args.ds), 'w', encoding='utf-8') as fout:
         for item in tqdm(res[0], total=len(res[0])):
             fout.write(json.dumps(item) + '\n')
         res.pop(0)

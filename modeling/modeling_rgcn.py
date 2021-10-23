@@ -195,7 +195,7 @@ class LMRGCNDataLoader(object):
             assert all(len(self.test_qids) == len(self.test_adj_data) == x.size(0) for x in [self.test_labels] + self.test_data)
 
         if self.is_inhouse:
-            with open(inhouse_train_qids_path, 'r') as fin:
+            with open(inhouse_train_qids_path, 'r', encoding='utf-8') as fin:
                 inhouse_qids = set(line.strip() for line in fin)
             self.inhouse_train_indexes = torch.tensor([i for i, qid in enumerate(self.train_qids) if qid in inhouse_qids])
             self.inhouse_test_indexes = torch.tensor([i for i, qid in enumerate(self.train_qids) if qid not in inhouse_qids])

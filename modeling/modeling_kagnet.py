@@ -452,7 +452,7 @@ class KagNetDataLoader(data.Dataset):
         if test_statement_path is not None:
             self.test_graph_data = self._load_graphs(test_ngx_jsonl, use_cache)
         if self.is_inhouse:
-            with open(inhouse_train_qids_path, 'r') as fin:
+            with open(inhouse_train_qids_path, 'r', encoding='utf-8') as fin:
                 inhouse_qids = set(line.strip() for line in fin)
             self.inhouse_train_indexes = torch.tensor([i for i, qid in enumerate(self.train_qids) if qid in inhouse_qids])
             self.inhouse_test_indexes = torch.tensor([i for i, qid in enumerate(self.train_qids) if qid not in inhouse_qids])
@@ -473,7 +473,7 @@ class KagNetDataLoader(data.Dataset):
 
         nrow = sum(1 for _ in open(pf_jsonl, 'r'))
         qa_pair_data, cpt_path_data, rel_path_data, qa_path_num_data, path_len_data = [], [], [], [], []
-        with open(pf_jsonl, 'r') as fin:
+        with open(pf_jsonl, 'r', encoding='utf-8') as fin:
             for line in tqdm(fin, total=nrow, desc="loading paths"):
                 s = json.loads(line)
                 qa_pairs, paths, rels, qa_path_num, path_len = [], [], [], [], []
@@ -535,7 +535,7 @@ class KagNetDataLoader(data.Dataset):
             return dgs
 
         dgs = []
-        with open(graph_ngx_jsonl, 'r') as fin:
+        with open(graph_ngx_jsonl, 'r', encoding='utf-8') as fin:
             nxgs = [line for line in fin]
         for nxg_str in tqdm(nxgs, total=len(nxgs), desc='loading graphs'):
             nxg = nx.node_link_graph(json.loads(nxg_str))

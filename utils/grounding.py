@@ -303,7 +303,7 @@ def ground(statement_path, cpnet_vocab_path, pattern_path, output_path, num_proc
 
     sents = []
     answers = []
-    with open(statement_path, 'r') as fin:
+    with open(statement_path, 'r', encoding='utf-8') as fin:
         lines = [line for line in fin]
 
     if debug:
@@ -328,7 +328,7 @@ def ground(statement_path, cpnet_vocab_path, pattern_path, output_path, num_proc
     res = prune(res, cpnet_vocab_path)
 
     # check_path(output_path)
-    with open(output_path, 'w') as fout:
+    with open(output_path, 'w', encoding='utf-8') as fout:
         for dic in res:
             fout.write(json.dumps(dic) + '\n')
 

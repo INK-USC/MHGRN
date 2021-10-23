@@ -178,7 +178,7 @@ def tokenize_sentence_spacy(nlp, sent, lower_case=True, convert_num=False):
 def tokenize_statement_file(statement_path, output_path, lower_case=True, convert_num=False):
     nlp = spacy.load('en_core_web_sm', disable=['parser', 'ner', 'textcat'])
     nrow = sum(1 for _ in open(statement_path, 'r'))
-    with open(statement_path, 'r') as fin, open(output_path, 'w') as fout:
+    with open(statement_path, 'r', encoding='utf-8') as fin, open(output_path, 'w', encoding='utf-8') as fout:
         for line in tqdm(fin, total=nrow, desc='tokenizing'):
             data = json.loads(line)
             for statement in data['statements']:

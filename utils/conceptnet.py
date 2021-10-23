@@ -144,7 +144,7 @@ def extract_english(conceptnet_path, output_csv_path, output_vocab_path):
                         concepts_seen.add(w)
                         cpnet_vocab.append(w)
 
-    with open(output_vocab_path, 'w') as fout:
+    with open(output_vocab_path, 'w', encoding='utf-8') as fout:
         for word in cpnet_vocab:
             fout.write(word + '\n')
 

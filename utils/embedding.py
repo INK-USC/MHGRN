@@ -46,7 +46,7 @@ def glove2npy(glove_path, output_npy_path, output_vocab_path, skip_head=False,
 
 
 def load_vectors_from_npy_with_vocab(glove_npy_path, glove_vocab_path, vocab, verbose=True, save_path=None):
-    with open(glove_vocab_path, 'r') as fin:
+    with open(glove_vocab_path, 'r', encoding='utf-8') as fin:
         glove_w2idx = {line.strip(): i for i, line in enumerate(fin)}
     glove_emb = np.load(glove_npy_path)
     vectors = np.zeros((len(vocab), glove_emb.shape[1]), dtype=float)
@@ -66,7 +66,7 @@ def load_vectors_from_npy_with_vocab(glove_npy_path, glove_vocab_path, vocab, ve
 
 def load_pretrained_embeddings(glove_npy_path, glove_vocab_path, vocab_path, verbose=True, save_path=None):
     vocab = []
-    with open(vocab_path, 'r') as fin:
+    with open(vocab_path, 'r', encoding='utf-8') as fin:
         for line in fin.readlines():
             vocab.append(line.strip())
     load_vectors_from_npy_with_vocab(glove_npy_path=glove_npy_path, glove_vocab_path=glove_vocab_path, vocab=vocab, verbose=verbose, save_path=save_path)

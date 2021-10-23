@@ -136,7 +136,7 @@ class KVMDataLoader(object):
             self.test_decoder_data = self._load_triples(test_triple_pk)
 
         if self.is_inhouse:
-            with open(inhouse_train_qids_path, 'r') as fin:
+            with open(inhouse_train_qids_path, 'r', encoding='utf-8') as fin:
                 inhouse_qids = set(line.strip() for line in fin)
             self.inhouse_train_indexes = torch.tensor([i for i, qid in enumerate(self.train_qids) if qid in inhouse_qids])
             self.inhouse_test_indexes = torch.tensor([i for i, qid in enumerate(self.train_qids) if qid not in inhouse_qids])

@@ -255,7 +255,7 @@ def pred(args):  # Note: pred mode ALWAYS uses the official split
     print(f'| dataset: {old_args.dataset} | save_dir: {args.save_dir} |')
 
     for output_path, data_loader in [(dev_pred_path, dataset.dev())] + ([(test_pred_path, dataset.test())] if dataset.test_size() > 0 else []):
-        with torch.no_grad(), open(output_path, 'w') as fout:
+        with torch.no_grad(), open(output_path, 'w', encoding='utf-8') as fout:
             for qids, labels, *input_data in tqdm(data_loader):
                 logits = model(*input_data)
                 for qid, pred_label in zip(qids, logits.argmax(1)):

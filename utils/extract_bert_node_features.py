@@ -70,7 +70,7 @@ def extract_bert_node_features_from_adj(cpnet_vocab_path, statement_path, adj_pa
         all_input_ids, all_input_mask, all_segment_ids, all_span = [], [], [], []
 
         n = sum(1 for _ in open(statement_path, 'r'))
-        with open(statement_path, 'r') as fin:
+        with open(statement_path, 'r', encoding='utf-8') as fin:
             for line in tqdm(fin, total=n, desc='Calculating alignments'):
                 dic = json.loads(line)
                 question = dic['question']['stem']

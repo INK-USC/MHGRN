@@ -111,7 +111,7 @@ class GconAttnDataLoader(object):
             self.test_data += self._load_concepts(test_concept_jsonl)
 
         if self.is_inhouse:
-            with open(inhouse_train_qids_path, 'r') as fin:
+            with open(inhouse_train_qids_path, 'r', encoding='utf-8') as fin:
                 inhouse_qids = set(line.strip() for line in fin)
             self.inhouse_train_indexes = torch.tensor([i for i, qid in enumerate(self.train_qids) if qid in inhouse_qids])
             self.inhouse_test_indexes = torch.tensor([i for i, qid in enumerate(self.train_qids) if qid not in inhouse_qids])
@@ -144,7 +144,7 @@ class GconAttnDataLoader(object):
 
     def _load_concepts(self, concept_json):
 
-        with open(concept_json, 'r') as fin:
+        with open(concept_json, 'r', encoding='utf-8') as fin:
             concept_data = [json.loads(line) for line in fin]
         n = len(concept_data)
         qc = []

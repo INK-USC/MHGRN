@@ -261,9 +261,9 @@ def generate_graph(grounded_path, pruned_paths_path, cpnet_vocab_path, cpnet_gra
         load_cpnet(cpnet_graph_path)
 
     nrow = sum(1 for _ in open(grounded_path, 'r'))
-    with open(grounded_path, 'r') as fin_gr, \
-            open(pruned_paths_path, 'r') as fin_pf, \
-            open(output_path, 'w') as fout:
+    with open(grounded_path, 'r', encoding='utf-8') as fin_gr, \
+            open(pruned_paths_path, 'r', encoding='utf-8') as fin_pf, \
+            open(output_path, 'w', encoding='utf-8') as fout:
         for line_gr, line_pf in tqdm(zip(fin_gr, fin_pf), total=nrow):
             mcp = json.loads(line_gr)
             qa_pairs = json.loads(line_pf)
@@ -303,7 +303,7 @@ def generate_adj_matrices(ori_schema_graph_path, cpnet_graph_path, cpnet_vocab_p
     if cpnet_all is None:
         cpnet_all = nx.read_gpickle(cpnet_graph_path)
 
-    with open(ori_schema_graph_path, 'r') as fin:
+    with open(ori_schema_graph_path, 'r', encoding='utf-8') as fin:
         nxg_strs = [line for line in fin]
 
     if debug:

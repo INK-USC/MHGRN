@@ -236,7 +236,7 @@ class MultiGPUNxgDataBatchGenerator(object):
 
 
 def load_2hop_relational_paths_old(input_jsonl_path, max_tuple_num, num_choice=None):
-    with open(input_jsonl_path, 'r') as fin:
+    with open(input_jsonl_path, 'r', encoding='utf-8') as fin:
         rpath_data = [json.loads(line) for line in fin]
     n_samples = len(rpath_data)
     qa_data = torch.zeros((n_samples, max_tuple_num, 2), dtype=torch.long)
@@ -270,7 +270,7 @@ def load_2hop_relational_paths_old(input_jsonl_path, max_tuple_num, num_choice=N
 
 def load_2hop_relational_paths(rpath_jsonl_path, cpt_jsonl_path=None, emb_pk_path=None,
                                max_tuple_num=200, num_choice=None, node_feature_type=None):
-    with open(rpath_jsonl_path, 'r') as fin:
+    with open(rpath_jsonl_path, 'r', encoding='utf-8') as fin:
         rpath_data = [json.loads(line) for line in fin]
 
     with open(cpt_jsonl_path, 'rb') as fin:

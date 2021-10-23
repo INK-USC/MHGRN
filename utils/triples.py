@@ -46,7 +46,7 @@ def generate_triples_from_adj(adj_pk_path, mentioned_cpt_path, cpnet_vocab_path,
     if any(x is None for x in [concept2id, id2concept, relation2id, id2relation]):
         load_resources(cpnet_vocab_path)
 
-    with open(mentioned_cpt_path, 'r') as fin:
+    with open(mentioned_cpt_path, 'r', encoding='utf-8') as fin:
         data = [json.loads(line) for line in fin]
     mentioned_concepts = [([concept2id[ac] for ac in item["ac"]] + [concept2id[qc] for qc in item["qc"]]) for item in data]
 
@@ -141,7 +141,7 @@ def generate_triple_string(str_template_path, cpnet_vocab_path, triple_path, out
         load_templates(str_template_path=str_template_path)
     with open(triple_path, 'rb') as fin:
         triples, _ = pickle.load(fin)
-    with Pool(num_processes) as p, open(output_path, 'w') as fout:
+    with Pool(num_processes) as p, open(output_path, 'w', encoding='utf-8') as fout:
         for res in tqdm(p.imap(generate_triple_string_per_inst, triples), total=len(triples)):
             fout.write(json.dumps(res) + '\n')
 

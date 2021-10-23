@@ -115,7 +115,7 @@ def train(args):
     log_path = os.path.join(args.save_dir, 'log.csv')
     export_config(args, config_path)
     check_path(model_path)
-    with open(log_path, 'w') as fout:
+    with open(log_path, 'w', encoding='utf-8') as fout:
         fout.write('step,train_acc,dev_acc\n')
 
     ###################################################################################################
@@ -375,7 +375,7 @@ def decode(args):
                                                                                '^' if j == pred else ''),
                                                          path_ids_to_text(path)))
         output_path = os.path.join(args.save_dir, filename)
-        with open(output_path, 'w') as fout:
+        with open(output_path, 'w', encoding='utf-8') as fout:
             for line in outputs:
                 fout.write(line + '\n')
         print(f'outputs saved to {output_path}')

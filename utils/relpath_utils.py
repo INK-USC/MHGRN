@@ -99,11 +99,11 @@ def find_relational_paths(cpnet_vocab_path, cpnet_graph_path, grounded_path, out
         cpnet = nx.read_gpickle(cpnet_graph_path)
         cpnet_simple = get_cpnet_simple(cpnet)
 
-    with open(grounded_path, 'r') as fin:
+    with open(grounded_path, 'r', encoding='utf-8') as fin:
         data = [json.loads(line) for line in fin]
     data = [[item["ac"], item["qc"]] for item in data]
 
-    with Pool(num_processes) as p, open(output_path, 'w') as fout:
+    with Pool(num_processes) as p, open(output_path, 'w', encoding='utf-8') as fout:
         for pfr_qa in tqdm(p.imap(find_relational_paths_qa_pair, data), total=len(data), desc='Finding relational paths'):
             fout.write(json.dumps(pfr_qa) + '\n')
 
@@ -138,11 +138,11 @@ def find_relational_paths(cpnet_vocab_path, cpnet_graph_path, grounded_path, out
         cpnet = nx.read_gpickle(cpnet_graph_path)
         cpnet_simple = get_cpnet_simple(cpnet)
 
-    with open(grounded_path, 'r') as fin:
+    with open(grounded_path, 'r', encoding='utf-8') as fin:
         data = [json.loads(line) for line in fin]
     data = [[item["ac"], item["qc"]] for item in data]
 
-    with Pool(num_processes) as p, open(output_path, 'w') as fout:
+    with Pool(num_processes) as p, open(output_path, 'w', encoding='utf-8') as fout:
         for pfr_qa in tqdm(p.imap(find_relational_paths_qa_pair, data), total=len(data), desc='Finding relational paths'):
             fout.write(json.dumps(pfr_qa) + '\n')
 

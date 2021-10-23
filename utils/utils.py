@@ -26,7 +26,7 @@ def check_file(file):
 def export_config(config, path):
     param_dict = dict(vars(config))
     check_path(path)
-    with open(path, 'w') as fout:
+    with open(path, 'w', encoding='utf-8') as fout:
         json.dump(param_dict, fout, indent=4)
 
 

@@ -305,11 +305,11 @@ def find_paths(grounded_path, cpnet_vocab_path, cpnet_graph_path, output_path, n
     if cpnet is None or cpnet_simple is None:
         load_cpnet(cpnet_graph_path)
 
-    with open(grounded_path, 'r') as fin:
+    with open(grounded_path, 'r', encoding='utf-8') as fin:
         data = [json.loads(line) for line in fin]
     data = [[item["ac"], item["qc"]] for item in data]
 
-    with Pool(num_processes) as p, open(output_path, 'w') as fout:
+    with Pool(num_processes) as p, open(output_path, 'w', encoding='utf-8') as fout:
         for pfr_qa in tqdm(p.imap(find_paths_qa_pair, data), total=len(data)):
             fout.write(json.dumps(pfr_qa) + '\n')
 
@@ -357,10 +357,10 @@ def score_paths(raw_paths_path, concept_emb_path, rel_emb_path, cpnet_vocab_path
         raise NotImplementedError()
 
     all_scores = []
-    with open(raw_paths_path, 'r') as fin:
+    with open(raw_paths_path, 'r', encoding='utf-8') as fin:
         data = [json.loads(line) for line in fin]
 
-    with Pool(num_processes) as p, open(output_path, 'w') as fout:
+    with Pool(num_processes) as p, open(output_path, 'w', encoding='utf-8') as fout:
         for statement_scores in tqdm(p.imap(score_qa_pairs, data), total=len(data)):
             fout.write(json.dumps(statement_scores) + '\n')
 
@@ -373,9 +373,9 @@ def prune_paths(raw_paths_path, path_scores_path, output_path, threshold, verbos
     ori_len = 0
     pruned_len = 0
     nrow = sum(1 for _ in open(raw_paths_path, 'r'))
-    with open(raw_paths_path, 'r') as fin_raw, \
-            open(path_scores_path, 'r') as fin_score, \
-            open(output_path, 'w') as fout:
+    with open(raw_paths_path, 'r', encoding='utf-8') as fin_raw, \
+            open(path_scores_path, 'r', encoding='utf-8') as fin_score, \
+            open(output_path, 'w', encoding='utf-8') as fout:
         for line_raw, line_score in tqdm(zip(fin_raw, fin_score), total=nrow):
             qa_pairs = json.loads(line_raw)
             qa_pairs_scores = json.loads(line_score)
@@ -398,9 +398,9 @@ def prune_paths(raw_paths_path, path_scores_path, output_path, threshold, verbos
 
 def find_relational_paths_from_paths(pruned_paths_path, output_path, num_processes):
     print(f'extracting relational paths from {pruned_paths_path}...')
-    with open(pruned_paths_path, 'r') as fin:
+    with open(pruned_paths_path, 'r', encoding='utf-8') as fin:
         path_data = [json.loads(line) for line in fin]
-    with Pool(num_processes) as p, open(output_path, 'w') as fout:
+    with Pool(num_processes) as p, open(output_path, 'w', encoding='utf-8') as fout:
         for pfr_qa in tqdm(p.imap(find_relational_paths_from_paths_per_inst, path_data), total=len(path_data)):
             fout.write(json.dumps(pfr_qa) + '\n')
     print(f'paths saved to {output_path}')
