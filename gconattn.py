@@ -122,9 +122,6 @@ def train(args):
                        concept_dim=args.cpt_out_dim, concept_in_dim=concept_dim, freeze_ent_emb=args.freeze_ent_emb,
                        pretrained_concept_emb=cp_emb, hidden_dim=args.decoder_hidden_dim, dropout=args.dropoutm, encoder_config=lstm_config)
 
-    if args.freeze_ent_emb:
-        freeze_net(model.decoder.concept_emb)
-
     try:
         model.to(device)
     except RuntimeError as e:

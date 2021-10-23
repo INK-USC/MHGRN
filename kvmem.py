@@ -161,9 +161,6 @@ def train(args):
                       decoder_emb_p=args.d_dropoute, decoder_hidden_p=args.d_dropoutr, decoder_mlp_p=args.d_dropoutm,
                       encoder_config=lstm_config)
 
-        if args.freeze_ent_emb:
-            freeze_net(model.decoder.concept_emb)
-
         model.encoder.to(device0)
         model.decoder.to(device1)
     except RuntimeError as e:
